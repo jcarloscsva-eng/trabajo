@@ -54,6 +54,20 @@ export async function scoreJobMatch(
 export async function generateTailoredMaterials(
   profile: ProfileData,
   job: { title: string; company: string; description: string },
+): Promise<{ tailoredCv: string; coverLetter: string; tailoredCvHtml?: string }> {
+  const [text, tailoredCvHtml] = await Promise.all([
+    generateTailoredText(profile, job),
+    profile.cv_html_template.trim()
+      ? generateTailoredHtmlCv(profile, job)
+      : Promise.resolve(undefined),
+  ]);
+
+  return { ...text, ...(tailoredCvHtml ? { tailoredCvHtml } : {}) };
+}
+
+async function generateTailoredText(
+  profile: ProfileData,
+  job: { title: string; company: string; description: string },
 ): Promise<{ tailoredCv: string; coverLetter: string }> {
   const anthropic = client();
   const msg = await anthropic.messages.create({
@@ -61,8 +75,10 @@ export async function generateTailoredMaterials(
     max_tokens: 3000,
     system:
       "Eres un experto en redacción de CVs optimizados para sistemas ATS y cartas de " +
-      "presentación en español. Devuelves SOLO JSON válido con el formato " +
-      '{"tailoredCv": "<CV adaptado en texto plano, listo para ATS>", ' +
+      "presentación. Escribe siempre en el mismo idioma que la descripción de la oferta " +
+      "de empleo (si está en inglés, responde en inglés; si está en español, en español; " +
+      "si está en otro idioma, responde en ese idioma). Devuelves SOLO JSON válido con el " +
+      'formato {"tailoredCv": "<CV adaptado en texto plano, listo para ATS>", ' +
       '"coverLetter": "<carta de presentación breve y personalizada>"}. ' +
       "No inventes experiencia, logros ni empresas que no estén en el CV base: reordena, " +
       "resalta y reformula lo existente para alinearlo con la oferta.",
@@ -75,7 +91,7 @@ export async function generateTailoredMaterials(
           `- Puesto: ${job.title}\n- Empresa: ${job.company}\n` +
           `- Descripción: ${job.description.slice(0, 4000)}\n\n` +
           `Genera un CV adaptado (texto plano, compatible con ATS: sin tablas ni columnas) ` +
-          `y una cover letter dirigida a esta oferta.`,
+          `y una cover letter dirigida a esta oferta, en el idioma de la oferta.`,
       },
     ],
   });
@@ -86,6 +102,48 @@ export async function generateTailoredMaterials(
     tailoredCv: String(parsed.tailoredCv ?? ""),
     coverLetter: String(parsed.coverLetter ?? ""),
   };
+}
+
+async function generateTailoredHtmlCv(
+  profile: ProfileData,
+  job: { title: string; company: string; description: string },
+): Promise<string> {
+  const anthropic = client();
+  const msg = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 4000,
+    system:
+      "Eres un experto en diseño de CVs. Te dan una plantilla HTML/CSS ya diseñada con el " +
+      "CV actual de un candidato y una nueva oferta de empleo. Debes devolver un documento " +
+      "HTML COMPLETO que reutilice EXACTAMENTE la misma estructura, clases CSS y estilos de " +
+      "la plantilla (no cambies el diseño), pero con el contenido (resumen, competencias " +
+      "destacadas, orden y énfasis de logros) adaptado para maximizar el encaje con la nueva " +
+      "oferta. No inventes experiencia, logros, empresas ni fechas que no estén ya en la " +
+      "plantilla: puedes reordenar, resaltar y reformular lo existente. Escribe el contenido " +
+      "en el mismo idioma que la descripción de la oferta. Responde ÚNICAMENTE con el HTML " +
+      "completo (empezando en <!DOCTYPE html>), sin explicaciones ni bloques de código markdown.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Plantilla HTML actual del CV:\n${profile.cv_html_template.slice(0, 40000)}\n\n` +
+          `Oferta de empleo a la que aplica:\n` +
+          `- Puesto: ${job.title}\n- Empresa: ${job.company}\n` +
+          `- Descripción: ${job.description.slice(0, 4000)}\n\n` +
+          `Devuelve el HTML completo del CV adaptado, con el mismo diseño.`,
+      },
+    ],
+  });
+
+  const text = msg.content.find((c) => c.type === "text")?.text ?? "";
+  return extractHtml(text);
+}
+
+function extractHtml(text: string): string {
+  const fenced = text.match(/```(?:html)?\s*([\s\S]*?)```/i);
+  if (fenced) return fenced[1].trim();
+  const start = text.indexOf("<!DOCTYPE");
+  return start === -1 ? text.trim() : text.slice(start).trim();
 }
 
 function extractJson(text: string): string {

@@ -3,11 +3,13 @@
 import { useState } from "react";
 import type { Job } from "@/components/Dashboard";
 
+type Result = { tailoredCv: string; coverLetter: string; tailoredCvHtml?: string };
+
 export default function GenerateModal({ job, onClose }: { job: Job; onClose: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ tailoredCv: string; coverLetter: string } | null>(null);
-  const [tab, setTab] = useState<"cv" | "letter">("cv");
+  const [result, setResult] = useState<Result | null>(null);
+  const [tab, setTab] = useState<"cv" | "letter" | "visual">("cv");
 
   async function generate() {
     setLoading(true);
@@ -21,6 +23,7 @@ export default function GenerateModal({ job, onClose }: { job: Job; onClose: () 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error generando materiales");
       setResult(data);
+      setTab(data.tailoredCvHtml ? "visual" : "cv");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");
     } finally {
@@ -32,9 +35,20 @@ export default function GenerateModal({ job, onClose }: { job: Job; onClose: () 
     navigator.clipboard.writeText(text);
   }
 
+  function downloadHtml() {
+    if (!result?.tailoredCvHtml) return;
+    const blob = new Blob([result.tailoredCvHtml], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `CV - ${job.company} - ${job.title}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col gap-4 overflow-hidden rounded-lg bg-background p-6 shadow-xl">
+      <div className="flex max-h-[85vh] w-full max-w-3xl flex-col gap-4 overflow-hidden rounded-lg bg-background p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="font-semibold">{job.title}</h2>
@@ -59,12 +73,20 @@ export default function GenerateModal({ job, onClose }: { job: Job; onClose: () 
 
         {result && (
           <div className="flex flex-1 flex-col overflow-hidden">
-            <div className="mb-3 flex gap-2 text-sm">
+            <div className="mb-3 flex flex-wrap gap-2 text-sm">
+              {result.tailoredCvHtml && (
+                <button
+                  onClick={() => setTab("visual")}
+                  className={`rounded-md px-3 py-1 ${tab === "visual" ? "bg-foreground text-background" : "border border-black/10 dark:border-white/15"}`}
+                >
+                  CV visual
+                </button>
+              )}
               <button
                 onClick={() => setTab("cv")}
                 className={`rounded-md px-3 py-1 ${tab === "cv" ? "bg-foreground text-background" : "border border-black/10 dark:border-white/15"}`}
               >
-                CV adaptado
+                CV ATS (texto)
               </button>
               <button
                 onClick={() => setTab("letter")}
@@ -72,16 +94,43 @@ export default function GenerateModal({ job, onClose }: { job: Job; onClose: () 
               >
                 Cover letter
               </button>
-              <button
-                onClick={() => copy(tab === "cv" ? result.tailoredCv : result.coverLetter)}
-                className="ml-auto rounded-md border border-black/10 px-3 py-1 hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
-              >
-                Copiar
-              </button>
+              <div className="ml-auto flex gap-2">
+                {tab === "visual" && result.tailoredCvHtml && (
+                  <button
+                    onClick={downloadHtml}
+                    className="rounded-md border border-black/10 px-3 py-1 hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+                  >
+                    Descargar .html
+                  </button>
+                )}
+                <button
+                  onClick={() =>
+                    copy(
+                      tab === "cv"
+                        ? result.tailoredCv
+                        : tab === "letter"
+                          ? result.coverLetter
+                          : (result.tailoredCvHtml ?? ""),
+                    )
+                  }
+                  className="rounded-md border border-black/10 px-3 py-1 hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+                >
+                  Copiar
+                </button>
+              </div>
             </div>
-            <pre className="flex-1 overflow-auto whitespace-pre-wrap rounded-md bg-black/5 p-4 text-sm dark:bg-white/5">
-              {tab === "cv" ? result.tailoredCv : result.coverLetter}
-            </pre>
+
+            {tab === "visual" && result.tailoredCvHtml ? (
+              <iframe
+                srcDoc={result.tailoredCvHtml}
+                sandbox=""
+                className="flex-1 rounded-md border border-black/10 bg-white dark:border-white/15"
+              />
+            ) : (
+              <pre className="flex-1 overflow-auto whitespace-pre-wrap rounded-md bg-black/5 p-4 text-sm dark:bg-white/5">
+                {tab === "cv" ? result.tailoredCv : result.coverLetter}
+              </pre>
+            )}
           </div>
         )}
       </div>

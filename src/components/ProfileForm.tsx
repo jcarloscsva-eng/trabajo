@@ -11,6 +11,7 @@ type ProfileData = {
   locations: string;
   keywords: string;
   base_cv_text: string;
+  cv_html_template: string;
 };
 
 const EMPTY: ProfileData = {
@@ -22,6 +23,7 @@ const EMPTY: ProfileData = {
   locations: "",
   keywords: "",
   base_cv_text: "",
+  cv_html_template: "",
 };
 
 const FIELDS: { key: keyof ProfileData; label: string; placeholder: string }[] = [
@@ -62,22 +64,27 @@ export default function ProfileForm() {
     setMessage("Perfil guardado.");
   }
 
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>, kind: "cv" | "template") {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
     setMessage(null);
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("kind", kind);
     const res = await fetch("/api/cv/upload", { method: "POST", body: formData });
     const data = await res.json();
     setUploading(false);
     if (res.ok) {
-      setMessage(`CV subido y procesado (${data.chars} caracteres).`);
+      setMessage(
+        kind === "template"
+          ? `Plantilla visual subida (${data.chars} caracteres).`
+          : `CV subido y procesado (${data.chars} caracteres).`,
+      );
       const refreshed = await fetch("/api/profile").then((r) => r.json());
       if (refreshed.profile) setProfile(refreshed.profile);
     } else {
-      setMessage(data.error ?? "Error subiendo el CV");
+      setMessage(data.error ?? "Error subiendo el archivo");
     }
   }
 
@@ -106,8 +113,13 @@ export default function ProfileForm() {
       </div>
 
       <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium">CV base (para optimización ATS)</label>
-        <input type="file" accept=".pdf,.docx,.txt" onChange={handleUpload} disabled={uploading} />
+        <label className="text-sm font-medium">CV base (versión ATS, texto plano)</label>
+        <input
+          type="file"
+          accept=".pdf,.docx,.txt"
+          onChange={(e) => handleUpload(e, "cv")}
+          disabled={uploading}
+        />
         {profile.base_cv_text && (
           <p className="text-xs opacity-60">
             CV actual cargado: {profile.base_cv_text.length} caracteres.
@@ -124,6 +136,27 @@ export default function ProfileForm() {
           className="rounded-md border border-black/10 bg-transparent px-3 py-2 font-mono text-xs dark:border-white/15"
         />
       </label>
+
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium">
+          Plantilla visual de CV (HTML, opcional)
+        </label>
+        <p className="text-xs opacity-60">
+          Si subes el archivo .html de tu CV con diseño, la app generará también una versión
+          visual adaptada a cada oferta (mismo diseño, contenido reordenado y priorizado).
+        </p>
+        <input
+          type="file"
+          accept=".html,.htm"
+          onChange={(e) => handleUpload(e, "template")}
+          disabled={uploading}
+        />
+        {profile.cv_html_template && (
+          <p className="text-xs opacity-60">
+            Plantilla actual cargada: {profile.cv_html_template.length} caracteres.
+          </p>
+        )}
+      </div>
 
       <div className="flex items-center gap-3">
         <button

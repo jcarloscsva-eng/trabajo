@@ -14,7 +14,10 @@ selecciones. Login con Google, base de datos en tu propio Google Sheet.
   [Remotive](https://remotive.com/api-documentation) (ambas gratuitas). Se puede ampliar
   añadiendo más fuentes en `src/lib/jobSources.ts`.
 - **Scoring y generación**: Claude (Anthropic API) puntúa cada oferta 0-100 contra tu
-  perfil y, bajo demanda, adapta tu CV base y redacta una cover letter por oferta.
+  perfil y, bajo demanda, adapta tu CV base y redacta una cover letter por oferta, en el
+  mismo idioma que la oferta. Si subes también la plantilla HTML de tu CV con diseño
+  (Perfil → "Plantilla visual de CV"), genera además una versión visual adaptada
+  reutilizando ese mismo diseño.
 - **Notificaciones**: al pulsar "Buscar nuevos empleos" (o vía el cron opcional) se te
   envía un email a tu propia bandeja con el top de coincidencias nuevas.
 
@@ -33,7 +36,8 @@ selecciones. Login con Google, base de datos en tu propio Google Sheet.
      [developer.adzuna.com](https://developer.adzuna.com/).
 2. `npm install`
 3. `npm run dev` y entra en [http://localhost:3000](http://localhost:3000).
-4. Ve a **Perfil**, completa tus datos y sube tu CV (PDF/DOCX/TXT).
+4. Ve a **Perfil**, completa tus datos, sube tu CV base (PDF/DOCX/TXT) y, opcionalmente,
+   la plantilla HTML de tu CV con diseño.
 5. En **Dashboard**, pulsa "Buscar nuevos empleos".
 
 ## Automatización (búsqueda diaria sin tener la app abierta)

@@ -43,6 +43,7 @@ export type ProfileData = {
   locations: string;
   keywords: string;
   base_cv_text: string;
+  cv_html_template: string;
 };
 
 const PROFILE_DEFAULTS: ProfileData = {
@@ -54,6 +55,7 @@ const PROFILE_DEFAULTS: ProfileData = {
   locations: "",
   keywords: "",
   base_cv_text: "",
+  cv_html_template: "",
 };
 
 function clientsFor(accessToken: string) {

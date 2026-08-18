@@ -4,27 +4,35 @@ import { writeProfile } from "@/lib/sheets";
 
 export const maxDuration = 30;
 
+const MAX_TEMPLATE_CHARS = 40000;
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const file = formData.get("file");
+    const kind = formData.get("kind") === "template" ? "template" : "cv";
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "No se recibió ningún archivo" }, { status: 400 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const text = await extractText(file.name, buffer);
-
     const { accessToken, spreadsheetId } = await requireSession();
-    await writeProfile(accessToken, spreadsheetId, { base_cv_text: text });
 
+    if (kind === "template") {
+      const html = buffer.toString("utf-8").slice(0, MAX_TEMPLATE_CHARS);
+      await writeProfile(accessToken, spreadsheetId, { cv_html_template: html });
+      return NextResponse.json({ ok: true, chars: html.length });
+    }
+
+    const text = await extractText(file.name, buffer);
+    await writeProfile(accessToken, spreadsheetId, { base_cv_text: text });
     return NextResponse.json({ ok: true, chars: text.length });
   } catch (error) {
     if (error instanceof SessionError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
     console.error(error);
-    return NextResponse.json({ error: "Error procesando el CV" }, { status: 500 });
+    return NextResponse.json({ error: "Error procesando el archivo" }, { status: 500 });
   }
 }
 
