@@ -40,6 +40,7 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [maxDaysOld, setMaxDaysOld] = useState(30);
 
   async function fetchJobs(): Promise<Job[]> {
     const res = await fetch("/api/jobs");
@@ -57,8 +58,18 @@ export default function Dashboard() {
   async function handleSearch() {
     setSearching(true);
     setMessage(null);
+    // Mientras la búsqueda está en curso, cada oferta se va guardando en el
+    // Sheet según se puntúa (ver runJobSearch), así que refrescamos la lista
+    // periódicamente para que vayan apareciendo sin esperar a que termine todo.
+    const poll = setInterval(() => {
+      fetchJobs().then(setJobs);
+    }, 3000);
     try {
-      const res = await fetch("/api/jobs/fetch", { method: "POST" });
+      const res = await fetch("/api/jobs/fetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ maxDaysOld }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error");
       setMessage(
@@ -66,11 +77,12 @@ export default function Dashboard() {
           ? `Se encontraron ${data.newJobs} empleos nuevos.`
           : "No se encontraron empleos nuevos esta vez.",
       );
-      setJobs(await fetchJobs());
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Error buscando empleos");
     } finally {
+      clearInterval(poll);
       setSearching(false);
+      setJobs(await fetchJobs());
     }
   }
 
@@ -105,13 +117,27 @@ export default function Dashboard() {
             </p>
           )}
         </div>
-        <button
-          onClick={handleSearch}
-          disabled={searching}
-          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90 disabled:opacity-50"
-        >
-          {searching ? "Buscando…" : "Buscar nuevos empleos"}
-        </button>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm opacity-80">
+            Publicadas en los últimos
+            <input
+              type="number"
+              min={1}
+              max={90}
+              value={maxDaysOld}
+              onChange={(e) => setMaxDaysOld(Math.max(1, Number(e.target.value) || 1))}
+              className="w-16 rounded-md border border-black/10 bg-transparent px-2 py-1 text-center dark:border-white/15"
+            />
+            días
+          </label>
+          <button
+            onClick={handleSearch}
+            disabled={searching}
+            className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90 disabled:opacity-50"
+          >
+            {searching ? "Buscando…" : "Buscar nuevos empleos"}
+          </button>
+        </div>
       </div>
 
       {message && <p className="text-sm opacity-80">{message}</p>}

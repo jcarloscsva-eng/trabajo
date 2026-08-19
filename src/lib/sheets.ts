@@ -42,6 +42,7 @@ export type ProfileData = {
   seniority: string;
   locations: string;
   keywords: string;
+  max_days_old: string;
   base_cv_text: string;
   cv_html_template: string;
 };
@@ -54,6 +55,7 @@ const PROFILE_DEFAULTS: ProfileData = {
   seniority: "",
   locations: "",
   keywords: "",
+  max_days_old: "30",
   base_cv_text: "",
   cv_html_template: "",
 };
