@@ -1,5 +1,12 @@
 import { appendJobs, readJobs, readProfile, type JobRow } from "@/lib/sheets";
-import { fetchAdzunaJobs, fetchRemotiveJobs, fetchJoobleJobs } from "@/lib/jobSources";
+import {
+  fetchAdzunaJobs,
+  fetchRemotiveJobs,
+  fetchJoobleJobs,
+  fetchArbeitnowJobs,
+  fetchRemoteOkJobs,
+  fetchCareerjetJobs,
+} from "@/lib/jobSources";
 import { scoreJobMatch } from "@/lib/gemini";
 import { sendSelfEmail } from "@/lib/gmail";
 
@@ -23,13 +30,16 @@ export async function runJobSearch(
   const daysOld = maxDaysOld ?? Number(profile.max_days_old) ?? undefined;
 
   const keywords = profile.keywords || profile.target_roles;
-  const [adzuna, remotive, jooble] = await Promise.all([
+  const [adzuna, remotive, jooble, arbeitnow, remoteok, careerjet] = await Promise.all([
     fetchAdzunaJobs(keywords, profile.locations, daysOld),
     fetchRemotiveJobs(keywords, daysOld),
     fetchJoobleJobs(keywords, profile.locations, daysOld),
+    fetchArbeitnowJobs(keywords, daysOld),
+    fetchRemoteOkJobs(keywords, daysOld),
+    fetchCareerjetJobs(keywords, profile.locations, daysOld),
   ]);
 
-  const candidates = [...adzuna, ...remotive, ...jooble]
+  const candidates = [...adzuna, ...remotive, ...jooble, ...arbeitnow, ...remoteok, ...careerjet]
     .filter((j) => !existingUrls.has(j.url))
     .slice(0, MAX_CANDIDATES_PER_RUN);
 

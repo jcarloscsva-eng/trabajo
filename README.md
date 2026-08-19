@@ -11,8 +11,10 @@ selecciones. Login con Google, base de datos en tu propio Google Sheet.
 - **Base de datos**: al iniciar sesión se crea (o reutiliza) una hoja de cálculo llamada
   `Job Search Tracker (App Data)` en tu Google Drive, con pestañas `Jobs` y `Profile`.
 - **Búsqueda de empleos**: [Adzuna](https://developer.adzuna.com/),
-  [Remotive](https://remotive.com/api-documentation) y
-  [Jooble](https://jooble.org/api/about) (todas gratuitas). Se puede ampliar
+  [Remotive](https://remotive.com/api-documentation),
+  [Jooble](https://jooble.org/api/about), [Arbeitnow](https://www.arbeitnow.com/api/job-board-api),
+  [RemoteOK](https://remoteok.com/api) y [Careerjet](https://www.careerjet.com/partners/)
+  (todas gratuitas; Arbeitnow y RemoteOK no requieren API key). Se puede ampliar
   añadiendo más fuentes en `src/lib/jobSources.ts`.
 - **Scoring y generación**: Google Gemini (nivel gratuito) puntúa cada oferta 0-100
   contra tu perfil y, bajo demanda, adapta tu CV base y redacta una cover letter por
@@ -38,6 +40,10 @@ selecciones. Login con Google, base de datos en tu propio Google Sheet.
      [developer.adzuna.com](https://developer.adzuna.com/).
    - `JOOBLE_API_KEY`: gratis en [jooble.org/api/about](https://jooble.org/api/about)
      (rellena el formulario con tu email, te llega la key al momento).
+   - `CAREERJET_AFFID`: gratis en [careerjet.com/partners](https://www.careerjet.com/partners/)
+     (registro como afiliado). Opcional — sin esta variable, Careerjet simplemente no
+     se consulta.
+   - Arbeitnow y RemoteOK no necesitan configuración, se activan solas.
 2. `npm install`
 3. `npm run dev` y entra en [http://localhost:3000](http://localhost:3000).
 4. Ve a **Perfil**, completa tus datos, sube tu CV base (PDF/DOCX/TXT) y, opcionalmente,
@@ -73,7 +79,7 @@ src/
   lib/
     auth.ts           # config de NextAuth / Google OAuth
     sheets.ts          # lectura/escritura del Google Sheet (Jobs, Profile)
-    jobSources.ts       # integraciones Adzuna / Remotive / Jooble
+    jobSources.ts       # integraciones Adzuna / Remotive / Jooble / Arbeitnow / RemoteOK / Careerjet
     gemini.ts             # scoring + generación de CV/cover letter con Gemini
     jobSearch.ts          # orquesta búsqueda + scoring + notificación
     gmail.ts               # envío de email de notificación
