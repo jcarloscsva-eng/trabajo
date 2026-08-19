@@ -11,6 +11,7 @@ export type RawJob = {
 export async function fetchAdzunaJobs(
   keywords: string,
   location: string,
+  maxDaysOld?: number,
 ): Promise<RawJob[]> {
   const appId = process.env.ADZUNA_APP_ID;
   const appKey = process.env.ADZUNA_APP_KEY;
@@ -25,6 +26,7 @@ export async function fetchAdzunaJobs(
     content_type: "application/json",
   });
   if (location.trim()) params.set("where", location);
+  if (maxDaysOld && maxDaysOld > 0) params.set("max_days_old", String(maxDaysOld));
 
   const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/1?${params.toString()}`;
   const res = await fetch(url);
@@ -52,7 +54,10 @@ export async function fetchAdzunaJobs(
   }));
 }
 
-export async function fetchRemotiveJobs(keywords: string): Promise<RawJob[]> {
+export async function fetchRemotiveJobs(
+  keywords: string,
+  maxDaysOld?: number,
+): Promise<RawJob[]> {
   const params = new URLSearchParams();
   if (keywords.trim()) params.set("search", keywords);
 
@@ -71,15 +76,21 @@ export async function fetchRemotiveJobs(keywords: string): Promise<RawJob[]> {
     description: string;
     publication_date: string;
   };
-  return ((data.jobs ?? []) as RemotiveJob[]).slice(0, 20).map((j) => ({
-    source: "remotive",
-    title: j.title,
-    company: j.company_name,
-    location: j.candidate_required_location,
-    url: j.url,
-    description: stripHtml(j.description ?? ""),
-    posted_at: j.publication_date ?? "",
-  }));
+  const cutoff =
+    maxDaysOld && maxDaysOld > 0 ? Date.now() - maxDaysOld * 24 * 60 * 60 * 1000 : null;
+
+  return ((data.jobs ?? []) as RemotiveJob[])
+    .filter((j) => !cutoff || new Date(j.publication_date).getTime() >= cutoff)
+    .slice(0, 20)
+    .map((j) => ({
+      source: "remotive",
+      title: j.title,
+      company: j.company_name,
+      location: j.candidate_required_location,
+      url: j.url,
+      description: stripHtml(j.description ?? ""),
+      posted_at: j.publication_date ?? "",
+    }));
 }
 
 function stripHtml(html: string): string {

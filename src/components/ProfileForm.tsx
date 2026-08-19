@@ -10,6 +10,7 @@ type ProfileData = {
   seniority: string;
   locations: string;
   keywords: string;
+  max_days_old: string;
   base_cv_text: string;
   cv_html_template: string;
 };
@@ -22,6 +23,7 @@ const EMPTY: ProfileData = {
   seniority: "",
   locations: "",
   keywords: "",
+  max_days_old: "30",
   base_cv_text: "",
   cv_html_template: "",
 };
@@ -34,6 +36,11 @@ const FIELDS: { key: keyof ProfileData; label: string; placeholder: string }[] =
   { key: "seniority", label: "Seniority", placeholder: "Ej. Senior" },
   { key: "locations", label: "Ubicaciones preferidas", placeholder: "Ej. Madrid, remoto" },
   { key: "keywords", label: "Palabras clave de búsqueda", placeholder: "Ej. product manager saas" },
+  {
+    key: "max_days_old",
+    label: "Antigüedad máxima por defecto (días)",
+    placeholder: "Ej. 30",
+  },
 ];
 
 export default function ProfileForm() {

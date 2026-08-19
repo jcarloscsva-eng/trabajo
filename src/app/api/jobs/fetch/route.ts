@@ -6,10 +6,12 @@ import { runJobSearch, refreshGoogleAccessToken } from "@/lib/jobSearch";
 export const maxDuration = 60;
 
 // Triggered from the dashboard "Buscar nuevos empleos" button (uses the logged-in session).
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const { accessToken, email, spreadsheetId } = await requireSession();
-    const result = await runJobSearch(accessToken, email, spreadsheetId);
+    const body = await request.json().catch(() => ({}));
+    const maxDaysOld = Number(body?.maxDaysOld) || undefined;
+    const result = await runJobSearch(accessToken, email, spreadsheetId, maxDaysOld);
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof SessionError) {

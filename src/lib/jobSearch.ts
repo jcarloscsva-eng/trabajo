@@ -14,27 +14,32 @@ export async function runJobSearch(
   accessToken: string,
   email: string,
   spreadsheetId: string,
+  maxDaysOld?: number,
 ): Promise<{ newJobs: number }> {
   const startedAt = Date.now();
   const profile = await readProfile(accessToken, spreadsheetId);
   const existing = await readJobs(accessToken, spreadsheetId);
   const existingUrls = new Set(existing.map((j) => j.url));
+  const daysOld = maxDaysOld ?? Number(profile.max_days_old) ?? undefined;
 
   const keywords = profile.keywords || profile.target_roles;
   const [adzuna, remotive] = await Promise.all([
-    fetchAdzunaJobs(keywords, profile.locations),
-    fetchRemotiveJobs(keywords),
+    fetchAdzunaJobs(keywords, profile.locations, daysOld),
+    fetchRemotiveJobs(keywords, daysOld),
   ]);
 
   const candidates = [...adzuna, ...remotive]
     .filter((j) => !existingUrls.has(j.url))
     .slice(0, MAX_CANDIDATES_PER_RUN);
 
+  // Se guarda cada oferta justo tras puntuarla (en vez de esperar a tener el
+  // lote completo) para que aparezca en el dashboard casi en tiempo real y
+  // para no perder el trabajo ya hecho si la función se corta por tiempo.
   const scored: JobRow[] = [];
   for (const job of candidates) {
     if (Date.now() - startedAt > TIME_BUDGET_MS) break;
     const { score, reasoning } = await scoreJobMatch(profile, job);
-    scored.push({
+    const row: JobRow = {
       id: crypto.randomUUID(),
       source: job.source,
       title: job.title,
@@ -47,10 +52,10 @@ export async function runJobSearch(
       score: String(score),
       score_reasoning: reasoning,
       status: "new",
-    });
+    };
+    scored.push(row);
+    await appendJobs(accessToken, spreadsheetId, [row]);
   }
-
-  await appendJobs(accessToken, spreadsheetId, scored);
 
   if (scored.length > 0) {
     const top = [...scored].sort((a, b) => Number(b.score) - Number(a.score)).slice(0, 10);
