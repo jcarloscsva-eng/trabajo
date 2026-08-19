@@ -18,11 +18,12 @@ selecciones. Login con Google, base de datos en tu propio Google Sheet.
   aviso). Todas gratuitas y sin API key excepto Adzuna y Jooble. Se puede ampliar añadiendo
   más fuentes en `src/lib/jobSources.ts` — se descartó Careerjet porque exige declarar IPs
   fijas de servidor, incompatibles con las funciones serverless de Vercel.
-- **Scoring y generación**: Google Gemini (nivel gratuito) puntúa cada oferta 0-100
-  contra tu perfil y, bajo demanda, adapta tu CV base y redacta una cover letter por
-  oferta, en el mismo idioma que la oferta. Si subes también la plantilla HTML de tu CV
-  con diseño (Perfil → "Plantilla visual de CV"), genera además una versión visual
-  adaptada reutilizando ese mismo diseño.
+- **Scoring y generación**: [Groq](https://groq.com/) (nivel gratuito, modelo
+  `llama-3.1-8b-instant`, ~14.400 peticiones/día) puntúa cada oferta 0-100 contra tu
+  perfil y, bajo demanda, adapta tu CV base y redacta una cover letter por oferta, en
+  el mismo idioma que la oferta. Si subes también la plantilla HTML de tu CV con diseño
+  (Perfil → "Plantilla visual de CV"), genera además una versión visual adaptada
+  reutilizando ese mismo diseño.
 - **Notificaciones**: al pulsar "Buscar nuevos empleos" (o vía el cron opcional) se te
   envía un email a tu propia bandeja con el top de coincidencias nuevas.
 - **Parámetros de búsqueda**: desde el Dashboard puedes ajustar por búsqueda la
@@ -40,8 +41,8 @@ selecciones. Login con Google, base de datos en tu propio Google Sheet.
      `http://localhost:3000/api/auth/callback/google` (y la URL de producción cuando
      despliegues). Habilita las APIs de Google Sheets, Google Drive y Gmail en el
      proyecto de Cloud.
-   - `GEMINI_API_KEY`: gratis en [Google AI Studio](https://aistudio.google.com/apikey)
-     (inicia sesión con la misma cuenta de Google).
+   - `GROQ_API_KEY`: gratis en [console.groq.com/keys](https://console.groq.com/keys)
+     (regístrate con email o Google, genera la key al momento).
    - `ADZUNA_APP_ID` / `ADZUNA_APP_KEY`: gratis en
      [developer.adzuna.com](https://developer.adzuna.com/).
    - `JOOBLE_API_KEY`: gratis en [jooble.org/api/about](https://jooble.org/api/about)
@@ -68,7 +69,7 @@ Opcional. Sin esto, la búsqueda solo ocurre cuando pulsas el botón manualmente
 ## Stack
 
 Next.js 16 (App Router) · TypeScript · Tailwind CSS · Auth.js (Google OAuth) ·
-Google Sheets/Drive/Gmail APIs · Google Gemini API · Vercel (hosting + cron).
+Google Sheets/Drive/Gmail APIs · Groq API (Llama) · Vercel (hosting + cron).
 
 ## Estructura
 
@@ -83,7 +84,7 @@ src/
     auth.ts           # config de NextAuth / Google OAuth
     sheets.ts          # lectura/escritura del Google Sheet (Jobs, Profile)
     jobSources.ts       # integraciones Adzuna/Remotive/Jooble/Arbeitnow/RemoteOK/WWR/WorkingNomads
-    gemini.ts             # scoring + generación de CV/cover letter con Gemini
+    groq.ts               # scoring + generación de CV/cover letter con Groq (Llama)
     jobSearch.ts          # orquesta búsqueda + scoring + notificación
     gmail.ts               # envío de email de notificación
 ```

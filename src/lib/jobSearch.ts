@@ -9,7 +9,7 @@ import {
   fetchWorkingNomadsJobs,
   type RawJob,
 } from "@/lib/jobSources";
-import { scoreJobMatch } from "@/lib/gemini";
+import { scoreJobMatch } from "@/lib/groq";
 import { sendSelfEmail } from "@/lib/gmail";
 
 // El nivel gratuito de Gemini limita a ~15 peticiones/minuto y Vercel corta la
