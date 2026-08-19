@@ -136,6 +136,151 @@ export async function fetchJoobleJobs(
     }));
 }
 
+// Arbeitnow y RemoteOK no soportan filtrar por palabra clave en su API pública:
+// devuelven el listado completo y hay que filtrar en cliente.
+function matchesKeywords(text: string, keywords: string): boolean {
+  const terms = keywords
+    .toLowerCase()
+    .split(/[,\s]+/)
+    .filter(Boolean);
+  if (terms.length === 0) return true;
+  const haystack = text.toLowerCase();
+  return terms.some((term) => haystack.includes(term));
+}
+
+export async function fetchArbeitnowJobs(
+  keywords: string,
+  maxDaysOld?: number,
+): Promise<RawJob[]> {
+  const res = await fetch("https://www.arbeitnow.com/api/job-board-api");
+  if (!res.ok) {
+    console.error("Arbeitnow error", await res.text());
+    return [];
+  }
+  const data = await res.json();
+  type ArbeitnowJob = {
+    title: string;
+    company_name: string;
+    location: string;
+    url: string;
+    description: string;
+    created_at: number;
+  };
+  const cutoff =
+    maxDaysOld && maxDaysOld > 0 ? Date.now() - maxDaysOld * 24 * 60 * 60 * 1000 : null;
+
+  return ((data.data ?? []) as ArbeitnowJob[])
+    .filter((j) => !cutoff || j.created_at * 1000 >= cutoff)
+    .filter((j) => matchesKeywords(`${j.title} ${j.description}`, keywords))
+    .slice(0, 20)
+    .map((j) => ({
+      source: "arbeitnow",
+      title: j.title,
+      company: j.company_name ?? "",
+      location: j.location ?? "",
+      url: j.url,
+      description: stripHtml(j.description ?? ""),
+      posted_at: j.created_at ? new Date(j.created_at * 1000).toISOString() : "",
+    }));
+}
+
+export async function fetchRemoteOkJobs(
+  keywords: string,
+  maxDaysOld?: number,
+): Promise<RawJob[]> {
+  const res = await fetch("https://remoteok.com/api", {
+    headers: { "User-Agent": "JobSearchCopilot/1.0" },
+  });
+  if (!res.ok) {
+    console.error("RemoteOK error", await res.text());
+    return [];
+  }
+  const data = await res.json();
+  type RemoteOkJob = {
+    position: string;
+    company: string;
+    location?: string;
+    url: string;
+    description?: string;
+    tags?: string[];
+    date: string;
+  };
+  const cutoff =
+    maxDaysOld && maxDaysOld > 0 ? Date.now() - maxDaysOld * 24 * 60 * 60 * 1000 : null;
+
+  // El primer elemento del array es un aviso legal, no una oferta.
+  return ((data ?? []) as RemoteOkJob[])
+    .filter((j) => j.position && j.url)
+    .filter((j) => !cutoff || new Date(j.date).getTime() >= cutoff)
+    .filter((j) =>
+      matchesKeywords(`${j.position} ${j.description ?? ""} ${(j.tags ?? []).join(" ")}`, keywords),
+    )
+    .slice(0, 20)
+    .map((j) => ({
+      source: "remoteok",
+      title: j.position,
+      company: j.company ?? "",
+      location: j.location || "Remoto",
+      url: j.url,
+      description: stripHtml(j.description ?? ""),
+      posted_at: j.date ?? "",
+    }));
+}
+
+export async function fetchCareerjetJobs(
+  keywords: string,
+  location: string,
+  maxDaysOld?: number,
+): Promise<RawJob[]> {
+  const affid = process.env.CAREERJET_AFFID;
+  if (!affid || !keywords.trim()) return [];
+
+  const params = new URLSearchParams({
+    keywords,
+    affid,
+    user_ip: "0.0.0.0",
+    user_agent: "JobSearchCopilot/1.0",
+    locale_code: process.env.CAREERJET_LOCALE || "es_ES",
+    pagesize: "20",
+  });
+  if (location.trim()) params.set("location", location);
+
+  const url = `http://public.api.careerjet.net/search?${params.toString()}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    console.error("Careerjet error", await res.text());
+    return [];
+  }
+  const data = await res.json();
+  if (data.type !== "JOBS") {
+    console.error("Careerjet error", data);
+    return [];
+  }
+  type CareerjetJob = {
+    title: string;
+    company?: string;
+    locations?: string;
+    description: string;
+    url: string;
+    date: string;
+  };
+  const cutoff =
+    maxDaysOld && maxDaysOld > 0 ? Date.now() - maxDaysOld * 24 * 60 * 60 * 1000 : null;
+
+  return ((data.jobs ?? []) as CareerjetJob[])
+    .filter((j) => !cutoff || new Date(j.date).getTime() >= cutoff)
+    .slice(0, 20)
+    .map((j) => ({
+      source: "careerjet",
+      title: j.title,
+      company: j.company ?? "",
+      location: j.locations ?? "",
+      url: j.url,
+      description: j.description ?? "",
+      posted_at: j.date ?? "",
+    }));
+}
+
 function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
