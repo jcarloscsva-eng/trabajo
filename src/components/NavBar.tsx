@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signIn, signOut, useSession } from "next-auth/react";
+import Logo from "@/components/Logo";
 
 export default function NavBar() {
   const { data: session, status } = useSession();
@@ -11,19 +12,8 @@ export default function NavBar() {
   return (
     <header className="border-b border-border bg-card">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          <svg
-            width="22"
-            height="22"
-            viewBox="0 0 24 24"
-            fill="none"
-            className="text-primary"
-            aria-hidden="true"
-          >
-            <rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" strokeWidth="1.8" />
-            <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" strokeWidth="1.8" />
-            <path d="M3 12h18" stroke="currentColor" strokeWidth="1.8" />
-          </svg>
+        <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-tight">
+          <Logo />
           Job Search Copilot
         </Link>
         {session && (
