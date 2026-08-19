@@ -43,6 +43,72 @@ const FIELDS: { key: keyof ProfileData; label: string; placeholder: string }[] =
   },
 ];
 
+function UploadIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 15V4m0 0L8 8m4-4 4 4M5 19h14"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function DocIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M8 3h6l4 4v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M9 12h6M9 15.5h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function PaletteIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 3a9 9 0 1 0 0 18c1.1 0 1.7-.9 1.2-1.8-.3-.5-.1-1.2.5-1.4.8-.3 1.5.2 2.3.2 2.2 0 4-1.8 4-4A9 9 0 0 0 12 3Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <circle cx="7.5" cy="10.5" r="1.2" fill="currentColor" />
+      <circle cx="11" cy="7" r="1.2" fill="currentColor" />
+      <circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" />
+    </svg>
+  );
+}
+
+const inputClass =
+  "rounded-md border border-border bg-transparent px-3 py-2 transition-colors duration-150 focus:border-primary focus:outline-none";
+
+function SectionCard({
+  title,
+  icon,
+  description,
+  children,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5">
+      <div>
+        <h2 className="flex items-center gap-2 font-semibold">
+          {icon}
+          {title}
+        </h2>
+        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export default function ProfileForm() {
   const [profile, setProfile] = useState<ProfileData>(EMPTY);
   const [loading, setLoading] = useState(true);
@@ -95,85 +161,98 @@ export default function ProfileForm() {
     }
   }
 
-  if (loading) return <p className="opacity-60">Cargando…</p>;
+  if (loading) return <p className="text-sm text-muted-foreground">Cargando…</p>;
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold">Tu perfil</h1>
-      <p className="text-sm opacity-70">
-        Esta información se usa para buscar empleos afines, puntuar su alineación y adaptar tu
-        CV y cover letter.
-      </p>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {FIELDS.map((f) => (
-          <label key={f.key} className="flex flex-col gap-1 text-sm">
-            {f.label}
-            <input
-              value={profile[f.key]}
-              placeholder={f.placeholder}
-              onChange={(e) => setProfile({ ...profile, [f.key]: e.target.value })}
-              className="rounded-md border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
-            />
-          </label>
-        ))}
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Tu perfil</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Esta información se usa para buscar empleos afines, puntuar su alineación y adaptar tu
+          CV y cover letter.
+        </p>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium">CV base (versión ATS, texto plano)</label>
-        <input
-          type="file"
-          accept=".pdf,.docx,.txt"
-          onChange={(e) => handleUpload(e, "cv")}
-          disabled={uploading}
-        />
+      <SectionCard title="Datos de carrera">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {FIELDS.map((f) => (
+            <label key={f.key} className="flex flex-col gap-1 text-sm">
+              {f.label}
+              <input
+                value={profile[f.key]}
+                placeholder={f.placeholder}
+                onChange={(e) => setProfile({ ...profile, [f.key]: e.target.value })}
+                className={inputClass}
+              />
+            </label>
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="CV base"
+        icon={<DocIcon />}
+        description="Versión en texto plano optimizada para ATS. Se usa como base para adaptar el CV a cada oferta."
+      >
+        <label className="flex w-fit cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm transition-colors duration-150 hover:bg-muted">
+          <UploadIcon />
+          Subir CV (PDF, DOCX o TXT)
+          <input
+            type="file"
+            accept=".pdf,.docx,.txt"
+            onChange={(e) => handleUpload(e, "cv")}
+            disabled={uploading}
+            className="hidden"
+          />
+        </label>
         {profile.base_cv_text && (
-          <p className="text-xs opacity-60">
+          <p className="text-xs text-muted-foreground">
             CV actual cargado: {profile.base_cv_text.length} caracteres.
           </p>
         )}
-      </div>
-
-      <label className="flex flex-col gap-1 text-sm">
-        O pega el texto de tu CV directamente
-        <textarea
-          value={profile.base_cv_text}
-          onChange={(e) => setProfile({ ...profile, base_cv_text: e.target.value })}
-          rows={10}
-          className="rounded-md border border-black/10 bg-transparent px-3 py-2 font-mono text-xs dark:border-white/15"
-        />
-      </label>
-
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium">
-          Plantilla visual de CV (HTML, opcional)
+        <label className="flex flex-col gap-1 text-sm">
+          O pega el texto de tu CV directamente
+          <textarea
+            value={profile.base_cv_text}
+            onChange={(e) => setProfile({ ...profile, base_cv_text: e.target.value })}
+            rows={8}
+            className={`${inputClass} font-mono text-xs`}
+          />
         </label>
-        <p className="text-xs opacity-60">
-          Si subes el archivo .html de tu CV con diseño, la app generará también una versión
-          visual adaptada a cada oferta (mismo diseño, contenido reordenado y priorizado).
-        </p>
-        <input
-          type="file"
-          accept=".html,.htm"
-          onChange={(e) => handleUpload(e, "template")}
-          disabled={uploading}
-        />
+      </SectionCard>
+
+      <SectionCard
+        title="Plantilla visual de CV"
+        icon={<PaletteIcon />}
+        description="Opcional. Si subes el archivo .html de tu CV con diseño, la app genera también una versión visual adaptada a cada oferta (mismo diseño, contenido reordenado y priorizado)."
+      >
+        <label className="flex w-fit cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm transition-colors duration-150 hover:bg-muted">
+          <UploadIcon />
+          Subir plantilla (.html)
+          <input
+            type="file"
+            accept=".html,.htm"
+            onChange={(e) => handleUpload(e, "template")}
+            disabled={uploading}
+            className="hidden"
+          />
+        </label>
         {profile.cv_html_template && (
-          <p className="text-xs opacity-60">
+          <p className="text-xs text-muted-foreground">
             Plantilla actual cargada: {profile.cv_html_template.length} caracteres.
           </p>
         )}
-      </div>
+      </SectionCard>
 
       <div className="flex items-center gap-3">
         <button
           onClick={save}
           disabled={saving}
-          className="self-start rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90 disabled:opacity-50"
+          className="self-start rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity duration-150 hover:opacity-90 disabled:opacity-50"
         >
           {saving ? "Guardando…" : "Guardar perfil"}
         </button>
-        {message && <p className="text-sm opacity-70">{message}</p>}
+        {message && <p className="text-sm text-muted-foreground">{message}</p>}
       </div>
 
       <AutomationSetup />
@@ -194,31 +273,30 @@ function AutomationSetup() {
   }
 
   return (
-    <details className="rounded-md border border-black/10 p-4 text-sm dark:border-white/15">
+    <details className="rounded-xl border border-border bg-card p-5 text-sm">
       <summary className="cursor-pointer font-medium">
         Búsqueda automática en segundo plano (opcional)
       </summary>
-      <div className="mt-3 flex flex-col gap-2 opacity-80">
+      <div className="mt-3 flex flex-col gap-2 text-muted-foreground">
         <p>
           Para que la app busque empleos sola cada día (cron) sin que tengas la pestaña abierta,
           copia este token y añádelo como variable de entorno{" "}
-          <code className="rounded bg-black/5 px-1 dark:bg-white/10">GOOGLE_REFRESH_TOKEN</code>{" "}
-          en Vercel, junto con{" "}
-          <code className="rounded bg-black/5 px-1 dark:bg-white/10">NOTIFY_EMAIL</code> (tu email)
-          y <code className="rounded bg-black/5 px-1 dark:bg-white/10">CRON_SECRET</code> (uno
-          inventado por ti). Ver README para más detalle.
+          <code className="rounded bg-muted px-1 text-foreground">GOOGLE_REFRESH_TOKEN</code> en
+          Vercel, junto con <code className="rounded bg-muted px-1 text-foreground">NOTIFY_EMAIL</code>{" "}
+          (tu email) y <code className="rounded bg-muted px-1 text-foreground">CRON_SECRET</code>{" "}
+          (uno inventado por ti). Ver README para más detalle.
         </p>
         {!token ? (
           <button
             onClick={reveal}
-            className="self-start rounded-md border border-black/10 px-3 py-1.5 hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+            className="self-start rounded-md border border-border px-3 py-1.5 text-foreground transition-colors duration-150 hover:bg-muted"
           >
             Mostrar mi refresh token
           </button>
         ) : (
-          <code className="break-all rounded bg-black/5 p-2 dark:bg-white/10">{token}</code>
+          <code className="rounded bg-muted p-2 break-all text-foreground">{token}</code>
         )}
-        {error && <p className="text-red-500">{error}</p>}
+        {error && <p className="text-destructive">{error}</p>}
       </div>
     </details>
   );

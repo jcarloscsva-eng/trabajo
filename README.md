@@ -24,6 +24,10 @@ selecciones. Login con Google, base de datos en tu propio Google Sheet.
   adaptada reutilizando ese mismo diseño.
 - **Notificaciones**: al pulsar "Buscar nuevos empleos" (o vía el cron opcional) se te
   envía un email a tu propia bandeja con el top de coincidencias nuevas.
+- **Parámetros de búsqueda**: desde el Dashboard puedes ajustar por búsqueda la
+  ubicación, la modalidad (cualquiera / remoto / híbrido / presencial — en remoto se
+  reduce a bolsas 100% remotas, en híbrido/presencial se excluyen) y la antigüedad
+  máxima de las ofertas.
 
 ## Configuración
 
