@@ -34,7 +34,11 @@ export async function fetchAdzunaJobs(
   if (maxDaysOld && maxDaysOld > 0) params.set("max_days_old", String(maxDaysOld));
 
   const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/1?${params.toString()}`;
-  const res = await fetch(url);
+  // Sin un User-Agent identificable, el WAF de Adzuna a veces devuelve una
+  // página de error genérica (nginx/400) en vez de tocar la API real.
+  const res = await fetch(url, {
+    headers: { "User-Agent": "JobSearchCopilot/1.0 (+https://vercel.com)" },
+  });
   if (!res.ok) {
     const redactedUrl = url.replace(appKey, "REDACTED");
     console.error(`Adzuna error (status ${res.status}) for ${redactedUrl}:`, await res.text());
@@ -68,7 +72,7 @@ export async function fetchRemotiveJobs(
   if (keywords.trim()) params.set("search", keywords);
 
   const url = `https://remotive.com/api/remote-jobs?${params.toString()}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: { "User-Agent": "JobSearchCopilot/1.0" } });
   if (!res.ok) {
     console.error("Remotive error", await res.text());
     return [];
@@ -242,7 +246,9 @@ export async function fetchWeWorkRemotelyJobs(
   roles: string[],
   maxDaysOld?: number,
 ): Promise<RawJob[]> {
-  const res = await fetch("https://weworkremotely.com/remote-jobs.rss");
+  const res = await fetch("https://weworkremotely.com/remote-jobs.rss", {
+    headers: { "User-Agent": "JobSearchCopilot/1.0" },
+  });
   if (!res.ok) {
     console.error("WeWorkRemotely error", await res.text());
     return [];
