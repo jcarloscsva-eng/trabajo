@@ -227,60 +227,6 @@ export async function fetchRemoteOkJobs(
     }));
 }
 
-export async function fetchCareerjetJobs(
-  keywords: string,
-  location: string,
-  maxDaysOld?: number,
-): Promise<RawJob[]> {
-  const affid = process.env.CAREERJET_AFFID;
-  if (!affid || !keywords.trim()) return [];
-
-  const params = new URLSearchParams({
-    keywords,
-    affid,
-    user_ip: "0.0.0.0",
-    user_agent: "JobSearchCopilot/1.0",
-    locale_code: process.env.CAREERJET_LOCALE || "es_ES",
-    pagesize: "20",
-  });
-  if (location.trim()) params.set("location", location);
-
-  const url = `http://public.api.careerjet.net/search?${params.toString()}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    console.error("Careerjet error", await res.text());
-    return [];
-  }
-  const data = await res.json();
-  if (data.type !== "JOBS") {
-    console.error("Careerjet error", data);
-    return [];
-  }
-  type CareerjetJob = {
-    title: string;
-    company?: string;
-    locations?: string;
-    description: string;
-    url: string;
-    date: string;
-  };
-  const cutoff =
-    maxDaysOld && maxDaysOld > 0 ? Date.now() - maxDaysOld * 24 * 60 * 60 * 1000 : null;
-
-  return ((data.jobs ?? []) as CareerjetJob[])
-    .filter((j) => !cutoff || new Date(j.date).getTime() >= cutoff)
-    .slice(0, 20)
-    .map((j) => ({
-      source: "careerjet",
-      title: j.title,
-      company: j.company ?? "",
-      location: j.locations ?? "",
-      url: j.url,
-      description: j.description ?? "",
-      posted_at: j.date ?? "",
-    }));
-}
-
 function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
