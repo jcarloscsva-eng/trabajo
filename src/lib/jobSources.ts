@@ -93,6 +93,49 @@ export async function fetchRemotiveJobs(
     }));
 }
 
+export async function fetchJoobleJobs(
+  keywords: string,
+  location: string,
+  maxDaysOld?: number,
+): Promise<RawJob[]> {
+  const apiKey = process.env.JOOBLE_API_KEY;
+  if (!apiKey || !keywords.trim()) return [];
+
+  const res = await fetch(`https://jooble.org/api/${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ keywords, location, page: "1" }),
+  });
+  if (!res.ok) {
+    console.error("Jooble error", await res.text());
+    return [];
+  }
+  const data = await res.json();
+  type JoobleJob = {
+    title: string;
+    company: string;
+    location: string;
+    link: string;
+    snippet: string;
+    updated: string;
+  };
+  const cutoff =
+    maxDaysOld && maxDaysOld > 0 ? Date.now() - maxDaysOld * 24 * 60 * 60 * 1000 : null;
+
+  return ((data.jobs ?? []) as JoobleJob[])
+    .filter((j) => !cutoff || new Date(j.updated).getTime() >= cutoff)
+    .slice(0, 20)
+    .map((j) => ({
+      source: "jooble",
+      title: j.title,
+      company: j.company ?? "",
+      location: j.location ?? "",
+      url: j.link,
+      description: j.snippet ?? "",
+      posted_at: j.updated ?? "",
+    }));
+}
+
 function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
