@@ -237,6 +237,110 @@ export async function fetchRemoteOkJobs(
     }));
 }
 
+export async function fetchWeWorkRemotelyJobs(
+  roles: string[],
+  maxDaysOld?: number,
+): Promise<RawJob[]> {
+  const res = await fetch("https://weworkremotely.com/remote-jobs.rss");
+  if (!res.ok) {
+    console.error("WeWorkRemotely error", await res.text());
+    return [];
+  }
+  const xml = await res.text();
+  const cutoff =
+    maxDaysOld && maxDaysOld > 0 ? Date.now() - maxDaysOld * 24 * 60 * 60 * 1000 : null;
+
+  const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)];
+  const jobs: RawJob[] = [];
+  for (const [, itemXml] of items) {
+    const rawTitle = extractXmlTag(itemXml, "title");
+    const link = extractXmlTag(itemXml, "link");
+    const description = stripHtml(extractXmlTag(itemXml, "description"));
+    const pubDate = extractXmlTag(itemXml, "pubDate");
+    if (!rawTitle || !link) continue;
+    if (cutoff && pubDate && new Date(pubDate).getTime() < cutoff) continue;
+
+    // El título del feed viene como "Empresa: Puesto".
+    const [company, ...rest] = rawTitle.split(":");
+    const title = rest.length > 0 ? rest.join(":").trim() : rawTitle;
+    if (!matchesAnyRole(`${title} ${description}`, roles)) continue;
+
+    jobs.push({
+      source: "weworkremotely",
+      title,
+      company: rest.length > 0 ? company.trim() : "",
+      location: "Remoto",
+      url: link,
+      description,
+      posted_at: pubDate ? new Date(pubDate).toISOString() : "",
+    });
+    if (jobs.length >= 20) break;
+  }
+  return jobs;
+}
+
+function extractXmlTag(xml: string, tag: string): string {
+  const match = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
+  if (!match) return "";
+  return match[1]
+    .replace(/^<!\[CDATA\[([\s\S]*)\]\]>$/, "$1")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim();
+}
+
+// API interna de Working Nomads, no documentada oficialmente (usada por su
+// propio sitio y por varios scrapers públicos). Puede cambiar sin aviso.
+export async function fetchWorkingNomadsJobs(
+  roles: string[],
+  maxDaysOld?: number,
+): Promise<RawJob[]> {
+  const res = await fetch("https://www.workingnomads.com/api/exposed_jobs/", {
+    headers: { "User-Agent": "JobSearchCopilot/1.0" },
+  });
+  if (!res.ok) {
+    console.error("Working Nomads error", await res.text());
+    return [];
+  }
+  const data = await res.json();
+  type WorkingNomadsJob = {
+    title: string;
+    company_name?: string;
+    url: string;
+    description?: string;
+    location?: string;
+    tags?: string[] | string;
+    pub_date?: string;
+  };
+  const cutoff =
+    maxDaysOld && maxDaysOld > 0 ? Date.now() - maxDaysOld * 24 * 60 * 60 * 1000 : null;
+
+  return ((Array.isArray(data) ? data : []) as WorkingNomadsJob[])
+    .filter((j) => j.title && j.url)
+    .filter((j) => !cutoff || !j.pub_date || new Date(j.pub_date).getTime() >= cutoff)
+    .filter((j) =>
+      matchesAnyRole(
+        `${j.title} ${j.description ?? ""} ${
+          Array.isArray(j.tags) ? j.tags.join(" ") : (j.tags ?? "")
+        }`,
+        roles,
+      ),
+    )
+    .slice(0, 20)
+    .map((j) => ({
+      source: "workingnomads",
+      title: j.title,
+      company: j.company_name ?? "",
+      location: j.location || "Remoto",
+      url: j.url,
+      description: stripHtml(j.description ?? ""),
+      posted_at: j.pub_date ?? "",
+    }));
+}
+
 function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
