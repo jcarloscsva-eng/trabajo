@@ -5,6 +5,7 @@ import {
   fetchJoobleJobs,
   fetchArbeitnowJobs,
   fetchRemoteOkJobs,
+  type RawJob,
 } from "@/lib/jobSources";
 import { scoreJobMatch } from "@/lib/gemini";
 import { sendSelfEmail } from "@/lib/gmail";
@@ -38,28 +39,47 @@ export async function runJobSearch(
   const location = options.location?.trim() || profile.locations;
   const mode = options.mode ?? "any";
 
-  const keywords = profile.keywords || profile.target_roles;
+  const keywordsRaw = profile.keywords || profile.target_roles;
+  // "Roles objetivo" (y a veces "Palabras clave") suele llevar varios puestos
+  // separados por comas, ej. "Project Manager, Program Manager". Adzuna/Jooble
+  // interpretan una única cadena como "debe contener TODO eso a la vez", lo que
+  // devuelve casi cero resultados. Se busca cada rol por separado y se juntan.
+  const roles = keywordsRaw
+    .split(",")
+    .map((r) => r.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+  const roleQueries = roles.length > 0 ? roles : [keywordsRaw];
+
   // Adzuna y Jooble no tienen un filtro booleano de "remoto": se refuerza con
   // la propia palabra clave. Arbeitnow sí trae un campo remote real.
-  const searchKeywords = mode === "remote" ? `${keywords} remote` : keywords;
+  const remoteSuffix = mode === "remote" ? " remote" : "";
   const arbeitnowRemoteOnly = mode === "remote" ? true : mode === "onsite" ? false : undefined;
+  const includeRemoteOnlySources = mode !== "hybrid" && mode !== "onsite";
 
   const sourcePromises = [
-    fetchAdzunaJobs(searchKeywords, location, daysOld),
-    fetchJoobleJobs(searchKeywords, location, daysOld),
-    fetchArbeitnowJobs(keywords, daysOld, arbeitnowRemoteOnly),
-    // Remotive y RemoteOK son bolsas 100% remotas: no tiene sentido consultarlas
-    // si el usuario pide explícitamente híbrido o presencial.
-    ...(mode === "hybrid" || mode === "onsite"
-      ? []
-      : [fetchRemotiveJobs(keywords, daysOld), fetchRemoteOkJobs(keywords, daysOld)]),
+    // Adzuna, Jooble y Remotive filtran server-side: una llamada por rol.
+    ...roleQueries.flatMap((role) => [
+      fetchAdzunaJobs(`${role}${remoteSuffix}`, location, daysOld),
+      fetchJoobleJobs(`${role}${remoteSuffix}`, location, daysOld),
+      ...(includeRemoteOnlySources ? [fetchRemotiveJobs(role, daysOld)] : []),
+    ]),
+    // Arbeitnow y RemoteOK devuelven todo su listado sin filtro server-side:
+    // una sola llamada, comparando contra todos los roles en cliente.
+    fetchArbeitnowJobs(roleQueries, daysOld, arbeitnowRemoteOnly),
+    ...(includeRemoteOnlySources ? [fetchRemoteOkJobs(roleQueries, daysOld)] : []),
   ];
 
   const results = await Promise.all(sourcePromises);
-  const candidates = results
-    .flat()
-    .filter((j) => !existingUrls.has(j.url))
-    .slice(0, MAX_CANDIDATES_PER_RUN);
+  // Varias fuentes/roles pueden devolver la misma oferta; se deduplica por URL.
+  const seenUrls = new Set<string>();
+  const candidates: RawJob[] = [];
+  for (const job of results.flat()) {
+    if (existingUrls.has(job.url) || seenUrls.has(job.url)) continue;
+    seenUrls.add(job.url);
+    candidates.push(job);
+    if (candidates.length >= MAX_CANDIDATES_PER_RUN) break;
+  }
 
   // Se guarda cada oferta justo tras puntuarla (en vez de esperar a tener el
   // lote completo) para que aparezca en el dashboard casi en tiempo real y

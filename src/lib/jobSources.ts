@@ -137,19 +137,17 @@ export async function fetchJoobleJobs(
 }
 
 // Arbeitnow y RemoteOK no soportan filtrar por palabra clave en su API pública:
-// devuelven el listado completo y hay que filtrar en cliente.
-function matchesKeywords(text: string, keywords: string): boolean {
-  const terms = keywords
-    .toLowerCase()
-    .split(/[,\s]+/)
-    .filter(Boolean);
-  if (terms.length === 0) return true;
+// devuelven el listado completo y hay que filtrar en cliente. Se compara contra
+// cada rol como frase completa (no palabra por palabra) para no ser ni demasiado
+// estricto (todas las palabras a la vez) ni demasiado laxo ("Manager" suelto).
+function matchesAnyRole(text: string, roles: string[]): boolean {
+  if (roles.length === 0) return true;
   const haystack = text.toLowerCase();
-  return terms.some((term) => haystack.includes(term));
+  return roles.some((role) => haystack.includes(role.toLowerCase()));
 }
 
 export async function fetchArbeitnowJobs(
-  keywords: string,
+  roles: string[],
   maxDaysOld?: number,
   remoteOnly?: boolean,
 ): Promise<RawJob[]> {
@@ -174,7 +172,7 @@ export async function fetchArbeitnowJobs(
   return ((data.data ?? []) as ArbeitnowJob[])
     .filter((j) => !cutoff || j.created_at * 1000 >= cutoff)
     .filter((j) => remoteOnly === undefined || j.remote === remoteOnly)
-    .filter((j) => matchesKeywords(`${j.title} ${j.description}`, keywords))
+    .filter((j) => matchesAnyRole(`${j.title} ${j.description}`, roles))
     .slice(0, 20)
     .map((j) => ({
       source: "arbeitnow",
@@ -188,7 +186,7 @@ export async function fetchArbeitnowJobs(
 }
 
 export async function fetchRemoteOkJobs(
-  keywords: string,
+  roles: string[],
   maxDaysOld?: number,
 ): Promise<RawJob[]> {
   const res = await fetch("https://remoteok.com/api", {
@@ -216,7 +214,7 @@ export async function fetchRemoteOkJobs(
     .filter((j) => j.position && j.url)
     .filter((j) => !cutoff || new Date(j.date).getTime() >= cutoff)
     .filter((j) =>
-      matchesKeywords(`${j.position} ${j.description ?? ""} ${(j.tags ?? []).join(" ")}`, keywords),
+      matchesAnyRole(`${j.position} ${j.description ?? ""} ${(j.tags ?? []).join(" ")}`, roles),
     )
     .slice(0, 20)
     .map((j) => ({
