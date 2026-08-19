@@ -24,8 +24,8 @@ export async function fetchAdzunaJobs(
     app_key: appKey,
     // "what" exige TODAS las palabras a la vez; con varios roles (ej. "Project
     // Manager, Program Manager") eso da casi cero resultados. "what_or" busca
-    // cualquiera de las palabras — más amplio, pero el scoring posterior con
-    // Gemini filtra lo irrelevante, así que conviene pecar de incluir de más.
+    // cualquiera de las palabras — más amplio, pero el scoring posterior con IA
+    // filtra lo irrelevante, así que conviene pecar de incluir de más.
     what_or: words.join(" "),
     results_per_page: "20",
     content_type: "application/json",
@@ -36,7 +36,8 @@ export async function fetchAdzunaJobs(
   const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/1?${params.toString()}`;
   const res = await fetch(url);
   if (!res.ok) {
-    console.error("Adzuna error", await res.text());
+    const redactedUrl = url.replace(appKey, "REDACTED");
+    console.error(`Adzuna error (status ${res.status}) for ${redactedUrl}:`, await res.text());
     return [];
   }
   const data = await res.json();

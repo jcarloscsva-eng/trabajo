@@ -1,9 +1,9 @@
 import Groq from "groq-sdk";
 import type { ProfileData } from "./sheets";
 
-// Cuota gratuita de Groq muy generosa (14.400 peticiones/día en este modelo),
-// a diferencia de Gemini, cuya cuota gratuita varía por proyecto sin previo aviso.
-const MODEL = "llama-3.1-8b-instant";
+// Modelo por defecto de la propia documentación/SDK de Groq. 1.000 peticiones/día
+// gratis — bastante más predecible que la cuota de Gemini, que varía por proyecto.
+const MODEL = "openai/gpt-oss-20b";
 
 function client() {
   return new Groq({ apiKey: process.env.GROQ_API_KEY });
