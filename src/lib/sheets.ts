@@ -8,6 +8,7 @@ const JOBS_HEADERS = [
   "title",
   "company",
   "location",
+  "region",
   "url",
   "description",
   "posted_at",
@@ -25,6 +26,7 @@ export type JobRow = {
   title: string;
   company: string;
   location: string;
+  region: string;
   url: string;
   description: string;
   posted_at: string;
@@ -120,7 +122,7 @@ export async function readJobs(accessToken: string, spreadsheetId: string): Prom
   const { sheets } = clientsFor(accessToken);
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: "Jobs!A2:L",
+    range: "Jobs!A2:M",
   });
   const rows = res.data.values ?? [];
   return rows.map((row) => {

@@ -9,6 +9,7 @@ export type Job = {
   title: string;
   company: string;
   location: string;
+  region: string;
   url: string;
   description: string;
   posted_at: string;
@@ -291,11 +292,18 @@ export default function Dashboard() {
                     {job.company} · {job.location} · {job.source}
                   </p>
                 </div>
-                <span
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${scoreColor(Number(job.score))}`}
-                >
-                  {job.score}/100
-                </span>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${scoreColor(Number(job.score))}`}
+                  >
+                    {job.score}/100
+                  </span>
+                  {job.region && (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-muted-foreground">
+                      {job.region}
+                    </span>
+                  )}
+                </div>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">{job.score_reasoning}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
