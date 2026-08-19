@@ -9,19 +9,24 @@ export type RawJob = {
 };
 
 export async function fetchAdzunaJobs(
-  keywords: string,
+  roles: string[],
   location: string,
   maxDaysOld?: number,
 ): Promise<RawJob[]> {
   const appId = process.env.ADZUNA_APP_ID;
   const appKey = process.env.ADZUNA_APP_KEY;
-  if (!appId || !appKey || !keywords.trim()) return [];
+  const words = [...new Set(roles.join(" ").toLowerCase().split(/\s+/).filter(Boolean))];
+  if (!appId || !appKey || words.length === 0) return [];
 
   const country = process.env.ADZUNA_COUNTRY || "es";
   const params = new URLSearchParams({
     app_id: appId,
     app_key: appKey,
-    what: keywords,
+    // "what" exige TODAS las palabras a la vez; con varios roles (ej. "Project
+    // Manager, Program Manager") eso da casi cero resultados. "what_or" busca
+    // cualquiera de las palabras — más amplio, pero el scoring posterior con
+    // Gemini filtra lo irrelevante, así que conviene pecar de incluir de más.
+    what_or: words.join(" "),
     results_per_page: "20",
     content_type: "application/json",
   });
@@ -94,13 +99,17 @@ export async function fetchRemotiveJobs(
 }
 
 export async function fetchJoobleJobs(
-  keywords: string,
+  roles: string[],
   location: string,
   maxDaysOld?: number,
 ): Promise<RawJob[]> {
   const apiKey = process.env.JOOBLE_API_KEY;
+  const keywords = roles.join(", ");
   if (!apiKey || !keywords.trim()) return [];
 
+  // La propia documentación de Jooble usa varios puestos separados por comas
+  // en un único "keywords" (ej. "Sales Manager, Administrator"), así que no
+  // hace falta una petición por rol.
   const res = await fetch(`https://jooble.org/api/${apiKey}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

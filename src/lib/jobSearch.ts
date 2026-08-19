@@ -65,19 +65,23 @@ export async function runJobSearch(
   // Adzuna y Jooble no tienen un filtro booleano de "remoto": se refuerza con
   // la propia palabra clave. Arbeitnow sí trae un campo remote real.
   const remoteSuffix = mode === "remote" ? " remote" : "";
+  const remoteRoleQueries = roleQueries.map((role) => `${role}${remoteSuffix}`);
   const arbeitnowRemoteOnly = mode === "remote" ? true : mode === "onsite" ? false : undefined;
   const includeRemoteOnlySources = mode !== "hybrid" && mode !== "onsite";
 
   const sourcePromises = [
-    // Adzuna y Jooble filtran server-side por rol Y por ubicación: una llamada
-    // por cada combinación. Remotive no soporta ubicación, solo por rol.
-    ...roleQueries.flatMap((role) => [
-      ...locationQueries.flatMap((loc) => [
-        fetchAdzunaJobs(`${role}${remoteSuffix}`, loc, daysOld),
-        fetchJoobleJobs(`${role}${remoteSuffix}`, loc, daysOld),
-      ]),
-      ...(includeRemoteOnlySources ? [fetchRemotiveJobs(role, daysOld)] : []),
+    // Adzuna y Jooble aceptan varios roles en una sola llamada (ver
+    // fetchAdzunaJobs/fetchJoobleJobs): solo hace falta una petición por
+    // ubicación, no por cada combinación rol×ubicación (evita ráfagas que
+    // Adzuna puede bloquear).
+    ...locationQueries.flatMap((loc) => [
+      fetchAdzunaJobs(remoteRoleQueries, loc, daysOld),
+      fetchJoobleJobs(remoteRoleQueries, loc, daysOld),
     ]),
+    // Remotive no soporta ubicación ni varios roles en una llamada: una por rol.
+    ...(includeRemoteOnlySources
+      ? roleQueries.map((role) => fetchRemotiveJobs(role, daysOld))
+      : []),
     // Arbeitnow y RemoteOK devuelven todo su listado sin filtro server-side:
     // una sola llamada, comparando contra todos los roles en cliente.
     fetchArbeitnowJobs(roleQueries, daysOld, arbeitnowRemoteOnly),
