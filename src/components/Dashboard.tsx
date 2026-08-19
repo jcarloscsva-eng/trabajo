@@ -162,6 +162,9 @@ export default function Dashboard() {
   const filtered = useMemo(() => {
     return jobs.filter((j) => {
       if (Number(j.score) < minScore) return false;
+      // Las descartadas se ocultan por defecto; para revisarlas hay que
+      // elegir explícitamente "Descartado" en el filtro de Estado.
+      if (statusFilter === "all" && j.status === "discarded") return false;
       if (statusFilter !== "all" && j.status !== statusFilter) return false;
       return true;
     });
