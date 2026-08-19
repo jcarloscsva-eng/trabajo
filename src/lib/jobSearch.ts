@@ -1,6 +1,6 @@
 import { appendJobs, readJobs, readProfile, type JobRow } from "@/lib/sheets";
 import { fetchAdzunaJobs, fetchRemotiveJobs } from "@/lib/jobSources";
-import { scoreJobMatch } from "@/lib/anthropic";
+import { scoreJobMatch } from "@/lib/gemini";
 import { sendSelfEmail } from "@/lib/gmail";
 
 export async function runJobSearch(
