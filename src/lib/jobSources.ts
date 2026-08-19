@@ -3,65 +3,140 @@ export type RawJob = {
   title: string;
   company: string;
   location: string;
+  region: string;
   url: string;
   description: string;
   posted_at: string;
 };
 
-export async function fetchAdzunaJobs(
-  roles: string[],
-  location: string,
-  maxDaysOld?: number,
-): Promise<RawJob[]> {
-  const appId = process.env.ADZUNA_APP_ID;
-  const appKey = process.env.ADZUNA_APP_KEY;
-  const words = [...new Set(roles.join(" ").toLowerCase().split(/\s+/).filter(Boolean))];
-  if (!appId || !appKey || words.length === 0) return [];
+// Clasifica la ubicación (y si hace falta la descripción) en una macro-región,
+// para que sea fácil descartar de un vistazo ofertas fuera de zona horaria/
+// interés (ej. EEUU cuando buscas algo compatible con Europa).
+const REGION_KEYWORDS: { region: string; terms: string[] }[] = [
+  {
+    region: "LATAM",
+    terms: [
+      "latam",
+      "latin america",
+      "latinoamérica",
+      "sudamérica",
+      "south america",
+      "mexico",
+      "méxico",
+      "argentina",
+      "colombia",
+      "chile",
+      "peru",
+      "perú",
+      "brazil",
+      "brasil",
+      "ecuador",
+      "uruguay",
+      "venezuela",
+      "costa rica",
+      "panama",
+      "panamá",
+    ],
+  },
+  {
+    region: "EEUU/Norteamérica",
+    terms: [
+      "united states",
+      "usa",
+      "u.s.",
+      "us only",
+      "estados unidos",
+      "eeuu",
+      "canada",
+      "canadá",
+      "california",
+      "new york",
+      "texas",
+      "seattle",
+      "san francisco",
+      "austin",
+      "boston",
+      "chicago",
+    ],
+  },
+  {
+    region: "Asia/Pacífico",
+    terms: [
+      "asia",
+      "apac",
+      "india",
+      "china",
+      "japan",
+      "japón",
+      "singapore",
+      "singapur",
+      "philippines",
+      "filipinas",
+      "australia",
+      "new zealand",
+      "nueva zelanda",
+      "vietnam",
+      "indonesia",
+      "malaysia",
+      "hong kong",
+      "korea",
+      "corea",
+    ],
+  },
+  {
+    region: "EMEA",
+    terms: [
+      "spain",
+      "españa",
+      "madrid",
+      "barcelona",
+      "valladolid",
+      "valencia",
+      "sevilla",
+      "bilbao",
+      "europe",
+      "europa",
+      "emea",
+      "united kingdom",
+      "uk",
+      "london",
+      "germany",
+      "alemania",
+      "berlin",
+      "france",
+      "francia",
+      "paris",
+      "italy",
+      "italia",
+      "portugal",
+      "lisbon",
+      "netherlands",
+      "holanda",
+      "ireland",
+      "irlanda",
+      "poland",
+      "polonia",
+      "belgium",
+      "bélgica",
+      "switzerland",
+      "suiza",
+      "sweden",
+      "suecia",
+      "africa",
+      "áfrica",
+      "middle east",
+      "dubai",
+      "emirates",
+    ],
+  },
+];
 
-  const country = process.env.ADZUNA_COUNTRY || "es";
-  const params = new URLSearchParams({
-    app_id: appId,
-    app_key: appKey,
-    // "what" exige TODAS las palabras a la vez; con varios roles (ej. "Project
-    // Manager, Program Manager") eso da casi cero resultados. "what_or" busca
-    // cualquiera de las palabras — más amplio, pero el scoring posterior con IA
-    // filtra lo irrelevante, así que conviene pecar de incluir de más.
-    what_or: words.join(" "),
-    results_per_page: "20",
-    content_type: "application/json",
-  });
-  if (location.trim()) params.set("where", location);
-  if (maxDaysOld && maxDaysOld > 0) params.set("max_days_old", String(maxDaysOld));
-
-  const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/1?${params.toString()}`;
-  // Sin un User-Agent identificable, el WAF de Adzuna a veces devuelve una
-  // página de error genérica (nginx/400) en vez de tocar la API real.
-  const res = await fetch(url, {
-    headers: { "User-Agent": "JobSearchCopilot/1.0 (+https://vercel.com)" },
-  });
-  if (!res.ok) {
-    const redactedUrl = url.replace(appKey, "REDACTED");
-    console.error(`Adzuna error (status ${res.status}) for ${redactedUrl}:`, await res.text());
-    return [];
+export function classifyRegion(...texts: string[]): string {
+  const haystack = texts.join(" ").toLowerCase();
+  for (const { region, terms } of REGION_KEYWORDS) {
+    if (terms.some((term) => haystack.includes(term))) return region;
   }
-  const data = await res.json();
-  type AdzunaResult = {
-    title: string;
-    company?: { display_name?: string };
-    location?: { display_name?: string };
-    redirect_url: string;
-    description: string;
-    created: string;
-  };
-  return ((data.results ?? []) as AdzunaResult[]).map((r) => ({
-    source: "adzuna",
-    title: r.title,
-    company: r.company?.display_name ?? "",
-    location: r.location?.display_name ?? "",
-    url: r.redirect_url,
-    description: r.description ?? "",
-    posted_at: r.created ?? "",
-  }));
+  return "Global / No especificada";
 }
 
 export async function fetchRemotiveJobs(
@@ -97,6 +172,7 @@ export async function fetchRemotiveJobs(
       title: j.title,
       company: j.company_name,
       location: j.candidate_required_location,
+      region: classifyRegion(j.candidate_required_location, j.title),
       url: j.url,
       description: stripHtml(j.description ?? ""),
       posted_at: j.publication_date ?? "",
@@ -144,6 +220,7 @@ export async function fetchJoobleJobs(
       title: j.title,
       company: j.company ?? "",
       location: j.location ?? "",
+      region: classifyRegion(j.location ?? "", j.title),
       url: j.link,
       description: j.snippet ?? "",
       posted_at: j.updated ?? "",
@@ -193,6 +270,7 @@ export async function fetchArbeitnowJobs(
       title: j.title,
       company: j.company_name ?? "",
       location: j.location ?? "",
+      region: classifyRegion(j.location ?? "", j.description),
       url: j.url,
       description: stripHtml(j.description ?? ""),
       posted_at: j.created_at ? new Date(j.created_at * 1000).toISOString() : "",
@@ -236,6 +314,7 @@ export async function fetchRemoteOkJobs(
       title: j.position,
       company: j.company ?? "",
       location: j.location || "Remoto",
+      region: classifyRegion(j.location ?? "", j.description ?? ""),
       url: j.url,
       description: stripHtml(j.description ?? ""),
       posted_at: j.date ?? "",
@@ -277,6 +356,7 @@ export async function fetchWeWorkRemotelyJobs(
       title,
       company: rest.length > 0 ? company.trim() : "",
       location: "Remoto",
+      region: classifyRegion(description),
       url: link,
       description,
       posted_at: pubDate ? new Date(pubDate).toISOString() : "",
@@ -342,6 +422,7 @@ export async function fetchWorkingNomadsJobs(
       title: j.title,
       company: j.company_name ?? "",
       location: j.location || "Remoto",
+      region: classifyRegion(j.location ?? "", j.description ?? ""),
       url: j.url,
       description: stripHtml(j.description ?? ""),
       posted_at: j.pub_date ?? "",

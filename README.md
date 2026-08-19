@@ -10,14 +10,19 @@ selecciones. Login con Google, base de datos en tu propio Google Sheet.
   (solo archivos creados por la app) y envío de Gmail.
 - **Base de datos**: al iniciar sesión se crea (o reutiliza) una hoja de cálculo llamada
   `Job Search Tracker (App Data)` en tu Google Drive, con pestañas `Jobs` y `Profile`.
-- **Búsqueda de empleos**: [Adzuna](https://developer.adzuna.com/),
-  [Remotive](https://remotive.com/api-documentation),
+- **Búsqueda de empleos**: [Remotive](https://remotive.com/api-documentation),
   [Jooble](https://jooble.org/api/about), [Arbeitnow](https://www.arbeitnow.com/api/job-board-api),
   [RemoteOK](https://remoteok.com/api), [WeWorkRemotely](https://weworkremotely.com/remote-job-rss-feed)
   (RSS oficial) y Working Nomads (API interna no documentada oficialmente, puede romperse sin
-  aviso). Todas gratuitas y sin API key excepto Adzuna y Jooble. Se puede ampliar añadiendo
+  aviso). Todas gratuitas y sin API key excepto Jooble. Se puede ampliar añadiendo
   más fuentes en `src/lib/jobSources.ts` — se descartó Careerjet porque exige declarar IPs
-  fijas de servidor, incompatibles con las funciones serverless de Vercel.
+  fijas de servidor, incompatibles con las funciones serverless de Vercel, y se descartó
+  Adzuna porque su WAF bloquea las IPs de los datacenters de Vercel con un error 400,
+  incluso con credenciales válidas y la petición bien formada.
+- **Región del puesto**: cada oferta se clasifica automáticamente (por su ubicación y
+  descripción) en una macro-región — EMEA, LATAM, EEUU/Norteamérica, Asia/Pacífico o
+  "Global / No especificada" — y se muestra como etiqueta junto a la puntuación, para
+  descartar de un vistazo ofertas fuera de tu zona de interés.
 - **Scoring y generación**: [Groq](https://groq.com/) (nivel gratuito, modelo
   `llama-3.1-8b-instant`, ~14.400 peticiones/día) puntúa cada oferta 0-100 contra tu
   perfil y, bajo demanda, adapta tu CV base y redacta una cover letter por oferta, en
@@ -43,8 +48,6 @@ selecciones. Login con Google, base de datos en tu propio Google Sheet.
      proyecto de Cloud.
    - `GROQ_API_KEY`: gratis en [console.groq.com/keys](https://console.groq.com/keys)
      (regístrate con email o Google, genera la key al momento).
-   - `ADZUNA_APP_ID` / `ADZUNA_APP_KEY`: gratis en
-     [developer.adzuna.com](https://developer.adzuna.com/).
    - `JOOBLE_API_KEY`: gratis en [jooble.org/api/about](https://jooble.org/api/about)
      (rellena el formulario con tu email, te llega la key al momento).
    - Arbeitnow y RemoteOK no necesitan configuración, se activan solas.
@@ -83,7 +86,7 @@ src/
   lib/
     auth.ts           # config de NextAuth / Google OAuth
     sheets.ts          # lectura/escritura del Google Sheet (Jobs, Profile)
-    jobSources.ts       # integraciones Adzuna/Remotive/Jooble/Arbeitnow/RemoteOK/WWR/WorkingNomads
+    jobSources.ts       # integraciones Remotive/Jooble/Arbeitnow/RemoteOK/WWR/WorkingNomads
     groq.ts               # scoring + generación de CV/cover letter con Groq (Llama)
     jobSearch.ts          # orquesta búsqueda + scoring + notificación
     gmail.ts               # envío de email de notificación

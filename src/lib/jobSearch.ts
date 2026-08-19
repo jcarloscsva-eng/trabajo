@@ -1,6 +1,5 @@
 import { appendJobs, readJobs, readProfile, type JobRow } from "@/lib/sheets";
 import {
-  fetchAdzunaJobs,
   fetchRemotiveJobs,
   fetchJoobleJobs,
   fetchArbeitnowJobs,
@@ -43,8 +42,8 @@ export async function runJobSearch(
 
   const keywordsRaw = profile.keywords || profile.target_roles;
   // "Roles objetivo" (y a veces "Palabras clave") suele llevar varios puestos
-  // separados por comas, ej. "Project Manager, Program Manager". Adzuna/Jooble
-  // interpretan una única cadena como "debe contener TODO eso a la vez", lo que
+  // separados por comas, ej. "Project Manager, Program Manager". Jooble
+  // interpreta una única cadena como "debe contener TODO eso a la vez", lo que
   // devuelve casi cero resultados. Se busca cada rol por separado y se juntan.
   const roles = keywordsRaw
     .split(",")
@@ -54,7 +53,7 @@ export async function runJobSearch(
   const roleQueries = roles.length > 0 ? roles : [keywordsRaw];
 
   // Igual pasa con la ubicación: "Madrid, Valladolid" no es un lugar válido
-  // para Adzuna/Jooble. Se busca cada ciudad por separado. Se quitan anotaciones
+  // para Jooble. Se busca cada ciudad por separado. Se quitan anotaciones
   // entre paréntesis como "Madrid (Híbrido)" — esas APIs solo entienden el
   // nombre del lugar, la modalidad va aparte en el selector "Modalidad".
   const locations = locationRaw
@@ -64,22 +63,18 @@ export async function runJobSearch(
     .slice(0, 3);
   const locationQueries = locations.length > 0 ? locations : [""];
 
-  // Adzuna y Jooble no tienen un filtro booleano de "remoto": se refuerza con
-  // la propia palabra clave. Arbeitnow sí trae un campo remote real.
+  // Jooble no tiene un filtro booleano de "remoto": se refuerza con la propia
+  // palabra clave. Arbeitnow sí trae un campo remote real.
   const remoteSuffix = mode === "remote" ? " remote" : "";
   const remoteRoleQueries = roleQueries.map((role) => `${role}${remoteSuffix}`);
   const arbeitnowRemoteOnly = mode === "remote" ? true : mode === "onsite" ? false : undefined;
   const includeRemoteOnlySources = mode !== "hybrid" && mode !== "onsite";
 
   const sourcePromises = [
-    // Adzuna y Jooble aceptan varios roles en una sola llamada (ver
-    // fetchAdzunaJobs/fetchJoobleJobs): solo hace falta una petición por
-    // ubicación, no por cada combinación rol×ubicación (evita ráfagas que
-    // Adzuna puede bloquear).
-    ...locationQueries.flatMap((loc) => [
-      fetchAdzunaJobs(remoteRoleQueries, loc, daysOld),
-      fetchJoobleJobs(remoteRoleQueries, loc, daysOld),
-    ]),
+    // Jooble acepta varios roles en una sola llamada (ver fetchJoobleJobs):
+    // solo hace falta una petición por ubicación, no por cada combinación
+    // rol×ubicación.
+    ...locationQueries.map((loc) => fetchJoobleJobs(remoteRoleQueries, loc, daysOld)),
     // Remotive no soporta ubicación ni varios roles en una llamada: una por rol.
     ...(includeRemoteOnlySources
       ? roleQueries.map((role) => fetchRemotiveJobs(role, daysOld))
@@ -120,6 +115,7 @@ export async function runJobSearch(
       title: job.title,
       company: job.company,
       location: job.location,
+      region: job.region,
       url: job.url,
       description: job.description,
       posted_at: job.posted_at,
