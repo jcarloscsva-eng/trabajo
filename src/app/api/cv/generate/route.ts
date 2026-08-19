@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession, SessionError } from "@/lib/requireSession";
 import { readJobs, readProfile } from "@/lib/sheets";
-import { generateTailoredMaterials } from "@/lib/anthropic";
+import { generateTailoredMaterials } from "@/lib/gemini";
 
 export const maxDuration = 60;
 
