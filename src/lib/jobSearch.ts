@@ -3,11 +3,19 @@ import { fetchAdzunaJobs, fetchRemotiveJobs } from "@/lib/jobSources";
 import { scoreJobMatch } from "@/lib/gemini";
 import { sendSelfEmail } from "@/lib/gmail";
 
+// El nivel gratuito de Gemini limita a ~15 peticiones/minuto y Vercel corta la
+// función a los 60s, así que en cada ejecución solo puntuamos un lote de ofertas
+// nuevas; el resto queda pendiente (no se guarda como "vista") y se recoge en la
+// siguiente búsqueda.
+const MAX_CANDIDATES_PER_RUN = 12;
+const TIME_BUDGET_MS = 45_000;
+
 export async function runJobSearch(
   accessToken: string,
   email: string,
   spreadsheetId: string,
 ): Promise<{ newJobs: number }> {
+  const startedAt = Date.now();
   const profile = await readProfile(accessToken, spreadsheetId);
   const existing = await readJobs(accessToken, spreadsheetId);
   const existingUrls = new Set(existing.map((j) => j.url));
@@ -18,10 +26,13 @@ export async function runJobSearch(
     fetchRemotiveJobs(keywords),
   ]);
 
-  const candidates = [...adzuna, ...remotive].filter((j) => !existingUrls.has(j.url));
+  const candidates = [...adzuna, ...remotive]
+    .filter((j) => !existingUrls.has(j.url))
+    .slice(0, MAX_CANDIDATES_PER_RUN);
 
   const scored: JobRow[] = [];
   for (const job of candidates) {
+    if (Date.now() - startedAt > TIME_BUDGET_MS) break;
     const { score, reasoning } = await scoreJobMatch(profile, job);
     scored.push({
       id: crypto.randomUUID(),
