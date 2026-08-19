@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import type { ProfileData } from "./sheets";
 
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-3.6-flash";
 
 function client() {
   return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
