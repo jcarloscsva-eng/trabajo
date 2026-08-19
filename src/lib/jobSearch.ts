@@ -5,6 +5,8 @@ import {
   fetchJoobleJobs,
   fetchArbeitnowJobs,
   fetchRemoteOkJobs,
+  fetchWeWorkRemotelyJobs,
+  fetchWorkingNomadsJobs,
   type RawJob,
 } from "@/lib/jobSources";
 import { scoreJobMatch } from "@/lib/gemini";
@@ -85,7 +87,13 @@ export async function runJobSearch(
     // Arbeitnow y RemoteOK devuelven todo su listado sin filtro server-side:
     // una sola llamada, comparando contra todos los roles en cliente.
     fetchArbeitnowJobs(roleQueries, daysOld, arbeitnowRemoteOnly),
-    ...(includeRemoteOnlySources ? [fetchRemoteOkJobs(roleQueries, daysOld)] : []),
+    ...(includeRemoteOnlySources
+      ? [
+          fetchRemoteOkJobs(roleQueries, daysOld),
+          fetchWeWorkRemotelyJobs(roleQueries, daysOld),
+          fetchWorkingNomadsJobs(roleQueries, daysOld),
+        ]
+      : []),
   ];
 
   const results = await Promise.all(sourcePromises);
