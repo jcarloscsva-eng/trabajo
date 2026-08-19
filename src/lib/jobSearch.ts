@@ -36,7 +36,7 @@ export async function runJobSearch(
   const existing = await readJobs(accessToken, spreadsheetId);
   const existingUrls = new Set(existing.map((j) => j.url));
   const daysOld = options.maxDaysOld ?? Number(profile.max_days_old) ?? undefined;
-  const location = options.location?.trim() || profile.locations;
+  const locationRaw = options.location?.trim() || profile.locations;
   const mode = options.mode ?? "any";
 
   const keywordsRaw = profile.keywords || profile.target_roles;
@@ -51,6 +51,17 @@ export async function runJobSearch(
     .slice(0, 5);
   const roleQueries = roles.length > 0 ? roles : [keywordsRaw];
 
+  // Igual pasa con la ubicación: "Madrid, Valladolid" no es un lugar válido
+  // para Adzuna/Jooble. Se busca cada ciudad por separado. Se quitan anotaciones
+  // entre paréntesis como "Madrid (Híbrido)" — esas APIs solo entienden el
+  // nombre del lugar, la modalidad va aparte en el selector "Modalidad".
+  const locations = locationRaw
+    .split(",")
+    .map((l) => l.replace(/\([^)]*\)/g, "").trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  const locationQueries = locations.length > 0 ? locations : [""];
+
   // Adzuna y Jooble no tienen un filtro booleano de "remoto": se refuerza con
   // la propia palabra clave. Arbeitnow sí trae un campo remote real.
   const remoteSuffix = mode === "remote" ? " remote" : "";
@@ -58,10 +69,13 @@ export async function runJobSearch(
   const includeRemoteOnlySources = mode !== "hybrid" && mode !== "onsite";
 
   const sourcePromises = [
-    // Adzuna, Jooble y Remotive filtran server-side: una llamada por rol.
+    // Adzuna y Jooble filtran server-side por rol Y por ubicación: una llamada
+    // por cada combinación. Remotive no soporta ubicación, solo por rol.
     ...roleQueries.flatMap((role) => [
-      fetchAdzunaJobs(`${role}${remoteSuffix}`, location, daysOld),
-      fetchJoobleJobs(`${role}${remoteSuffix}`, location, daysOld),
+      ...locationQueries.flatMap((loc) => [
+        fetchAdzunaJobs(`${role}${remoteSuffix}`, loc, daysOld),
+        fetchJoobleJobs(`${role}${remoteSuffix}`, loc, daysOld),
+      ]),
       ...(includeRemoteOnlySources ? [fetchRemotiveJobs(role, daysOld)] : []),
     ]),
     // Arbeitnow y RemoteOK devuelven todo su listado sin filtro server-side:
