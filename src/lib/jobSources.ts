@@ -151,6 +151,7 @@ function matchesKeywords(text: string, keywords: string): boolean {
 export async function fetchArbeitnowJobs(
   keywords: string,
   maxDaysOld?: number,
+  remoteOnly?: boolean,
 ): Promise<RawJob[]> {
   const res = await fetch("https://www.arbeitnow.com/api/job-board-api");
   if (!res.ok) {
@@ -165,12 +166,14 @@ export async function fetchArbeitnowJobs(
     url: string;
     description: string;
     created_at: number;
+    remote: boolean;
   };
   const cutoff =
     maxDaysOld && maxDaysOld > 0 ? Date.now() - maxDaysOld * 24 * 60 * 60 * 1000 : null;
 
   return ((data.data ?? []) as ArbeitnowJob[])
     .filter((j) => !cutoff || j.created_at * 1000 >= cutoff)
+    .filter((j) => remoteOnly === undefined || j.remote === remoteOnly)
     .filter((j) => matchesKeywords(`${j.title} ${j.description}`, keywords))
     .slice(0, 20)
     .map((j) => ({

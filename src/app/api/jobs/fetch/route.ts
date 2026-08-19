@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireSession, SessionError } from "@/lib/requireSession";
 import { getOrCreateSpreadsheetId } from "@/lib/sheets";
-import { runJobSearch, refreshGoogleAccessToken } from "@/lib/jobSearch";
+import { runJobSearch, refreshGoogleAccessToken, type JobMode } from "@/lib/jobSearch";
+
+const VALID_MODES: JobMode[] = ["any", "remote", "hybrid", "onsite"];
 
 export const maxDuration = 60;
 
@@ -11,7 +13,13 @@ export async function POST(request: Request) {
     const { accessToken, email, spreadsheetId } = await requireSession();
     const body = await request.json().catch(() => ({}));
     const maxDaysOld = Number(body?.maxDaysOld) || undefined;
-    const result = await runJobSearch(accessToken, email, spreadsheetId, maxDaysOld);
+    const location = typeof body?.location === "string" ? body.location : undefined;
+    const mode = VALID_MODES.includes(body?.mode) ? (body.mode as JobMode) : undefined;
+    const result = await runJobSearch(accessToken, email, spreadsheetId, {
+      maxDaysOld,
+      location,
+      mode,
+    });
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof SessionError) {

@@ -16,28 +16,48 @@ import { sendSelfEmail } from "@/lib/gmail";
 const MAX_CANDIDATES_PER_RUN = 12;
 const TIME_BUDGET_MS = 45_000;
 
+export type JobMode = "any" | "remote" | "hybrid" | "onsite";
+
+export type JobSearchOptions = {
+  maxDaysOld?: number;
+  location?: string;
+  mode?: JobMode;
+};
+
 export async function runJobSearch(
   accessToken: string,
   email: string,
   spreadsheetId: string,
-  maxDaysOld?: number,
+  options: JobSearchOptions = {},
 ): Promise<{ newJobs: number }> {
   const startedAt = Date.now();
   const profile = await readProfile(accessToken, spreadsheetId);
   const existing = await readJobs(accessToken, spreadsheetId);
   const existingUrls = new Set(existing.map((j) => j.url));
-  const daysOld = maxDaysOld ?? Number(profile.max_days_old) ?? undefined;
+  const daysOld = options.maxDaysOld ?? Number(profile.max_days_old) ?? undefined;
+  const location = options.location?.trim() || profile.locations;
+  const mode = options.mode ?? "any";
 
   const keywords = profile.keywords || profile.target_roles;
-  const [adzuna, remotive, jooble, arbeitnow, remoteok] = await Promise.all([
-    fetchAdzunaJobs(keywords, profile.locations, daysOld),
-    fetchRemotiveJobs(keywords, daysOld),
-    fetchJoobleJobs(keywords, profile.locations, daysOld),
-    fetchArbeitnowJobs(keywords, daysOld),
-    fetchRemoteOkJobs(keywords, daysOld),
-  ]);
+  // Adzuna y Jooble no tienen un filtro booleano de "remoto": se refuerza con
+  // la propia palabra clave. Arbeitnow sí trae un campo remote real.
+  const searchKeywords = mode === "remote" ? `${keywords} remote` : keywords;
+  const arbeitnowRemoteOnly = mode === "remote" ? true : mode === "onsite" ? false : undefined;
 
-  const candidates = [...adzuna, ...remotive, ...jooble, ...arbeitnow, ...remoteok]
+  const sourcePromises = [
+    fetchAdzunaJobs(searchKeywords, location, daysOld),
+    fetchJoobleJobs(searchKeywords, location, daysOld),
+    fetchArbeitnowJobs(keywords, daysOld, arbeitnowRemoteOnly),
+    // Remotive y RemoteOK son bolsas 100% remotas: no tiene sentido consultarlas
+    // si el usuario pide explícitamente híbrido o presencial.
+    ...(mode === "hybrid" || mode === "onsite"
+      ? []
+      : [fetchRemotiveJobs(keywords, daysOld), fetchRemoteOkJobs(keywords, daysOld)]),
+  ];
+
+  const results = await Promise.all(sourcePromises);
+  const candidates = results
+    .flat()
     .filter((j) => !existingUrls.has(j.url))
     .slice(0, MAX_CANDIDATES_PER_RUN);
 
