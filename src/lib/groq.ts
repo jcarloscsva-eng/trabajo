@@ -126,7 +126,13 @@ async function generateTailoredText(
   const completion = await groq.chat.completions.create({
     model: MODEL,
     response_format: { type: "json_object" },
-    max_tokens: 3000,
+    // Con 3000 se quedaba corto para un CV adaptado completo + cover letter:
+    // el modelo gastaba casi todo el presupuesto en el CV y la carta salía
+    // vacía (JSON válido, pero con "coverLetter": ""). El input de esta
+    // llamada tiene margen de sobra respecto al límite de 8.000 tokens/min
+    // de Groq (ver comentario junto a NVIDIA_MODEL más arriba), así que hay
+    // hueco para subir esto sin volver a acercarse al límite.
+    max_tokens: 4000,
     messages: [
       {
         role: "system",

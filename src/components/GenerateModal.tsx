@@ -95,6 +95,17 @@ export default function GenerateModal({ job, onClose }: { job: Job; onClose: () 
     URL.revokeObjectURL(url);
   }
 
+  function downloadCv() {
+    if (!result?.tailoredCv) return;
+    const blob = new Blob([result.tailoredCv], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `CV - ${job.company} - ${job.title}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4">
       <div className="flex max-h-[85vh] w-full max-w-3xl flex-col gap-4 overflow-hidden rounded-xl border border-border bg-card p-6">
@@ -164,6 +175,15 @@ export default function GenerateModal({ job, onClose }: { job: Job; onClose: () 
                   >
                     <DownloadIcon />
                     Descargar .html
+                  </button>
+                )}
+                {tab === "cv" && (
+                  <button
+                    onClick={downloadCv}
+                    className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1 transition-colors duration-150 hover:bg-muted"
+                  >
+                    <DownloadIcon />
+                    Descargar CV
                   </button>
                 )}
                 <button
