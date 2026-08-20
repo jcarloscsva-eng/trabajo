@@ -145,19 +145,27 @@ export default function ProfileForm() {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("kind", kind);
-    const res = await fetch("/api/cv/upload", { method: "POST", body: formData });
-    const data = await res.json();
-    setUploading(false);
-    if (res.ok) {
-      setMessage(
-        kind === "template"
-          ? `Plantilla visual subida (${data.chars} caracteres).`
-          : `CV subido y procesado (${data.chars} caracteres).`,
-      );
-      const refreshed = await fetch("/api/profile").then((r) => r.json());
-      if (refreshed.profile) setProfile(refreshed.profile);
-    } else {
-      setMessage(data.error ?? "Error subiendo el archivo");
+    try {
+      const res = await fetch("/api/cv/upload", { method: "POST", body: formData });
+      // Un timeout o error de plataforma en Vercel puede devolver HTML/texto
+      // en vez de JSON: se trata como fallo en vez de dejar que res.json()
+      // reviente sin avisar al usuario.
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) {
+        setMessage(
+          kind === "template"
+            ? `Plantilla visual subida (${data.chars} caracteres).`
+            : `CV subido y procesado (${data.chars} caracteres).`,
+        );
+        const refreshed = await fetch("/api/profile").then((r) => r.json());
+        if (refreshed.profile) setProfile(refreshed.profile);
+      } else {
+        setMessage(data?.error ?? `Error subiendo el archivo (HTTP ${res.status})`);
+      }
+    } catch {
+      setMessage("Error de red subiendo el archivo");
+    } finally {
+      setUploading(false);
     }
   }
 
