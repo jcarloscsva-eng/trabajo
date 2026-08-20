@@ -9,20 +9,23 @@ function client() {
   return new Groq({ apiKey: process.env.GROQ_API_KEY });
 }
 
-// Generar CV + carta (a diferencia de puntuar, que se hace muchas veces por
-// búsqueda) mete de golpe el CV/plantilla base entero: con plantillas HTML
-// grandes eso supera el límite de 8.000 tokens/minuto del tier gratuito de
-// Groq. Como esta llamada es rara (una por oferta seleccionada, no por
-// búsqueda), usa la API de NVIDIA NIM en su lugar — límite por peticiones/
-// minuto en vez de por tokens, así que una petición grande y puntual no
-// choca contra la cuota. Compatible con el formato de OpenAI.
+// Solo la plantilla HTML (hasta 40.000 caracteres) supera el límite de 8.000
+// tokens/minuto del tier gratuito de Groq — el CV en texto plano (base_cv_text
+// + oferta, unos 6.000 tokens en total) cabe de sobra. Por eso únicamente la
+// generación del CV visual usa NVIDIA NIM (límite por peticiones/minuto, no
+// por tokens); el texto se queda en Groq, que es mucho más rápido.
 const NVIDIA_MODEL = "meta/llama-3.3-70b-instruct";
+// NVIDIA NIM (modelo comunitario, no el hardware dedicado de Groq) puede
+// tardar más de lo que Vercel permite (60s por función). Como el CV visual es
+// opcional, se le pone un tope propio bastante por debajo de eso: si tarda
+// más, se aborta y el usuario se queda igualmente con el CV+carta en texto
+// (que no depende de esta llamada) en vez de que falle toda la generación.
+const NVIDIA_TIMEOUT_MS = 45_000;
 
 async function nvidiaChatCompletion(options: {
   system: string;
   user: string;
   maxTokens: number;
-  jsonMode?: boolean;
 }): Promise<string> {
   const res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
     method: "POST",
@@ -33,12 +36,12 @@ async function nvidiaChatCompletion(options: {
     body: JSON.stringify({
       model: NVIDIA_MODEL,
       max_tokens: options.maxTokens,
-      ...(options.jsonMode ? { response_format: { type: "json_object" } } : {}),
       messages: [
         { role: "system", content: options.system },
         { role: "user", content: options.user },
       ],
     }),
+    signal: AbortSignal.timeout(NVIDIA_TIMEOUT_MS),
   });
   if (!res.ok) {
     throw new Error(`NVIDIA NIM error (status ${res.status}): ${await res.text()}`);
@@ -98,42 +101,59 @@ export async function generateTailoredMaterials(
   profile: ProfileData,
   job: { title: string; company: string; description: string },
 ): Promise<{ tailoredCv: string; coverLetter: string; tailoredCvHtml?: string }> {
-  const [text, tailoredCvHtml] = await Promise.all([
+  const [text, htmlResult] = await Promise.all([
     generateTailoredText(profile, job),
     profile.cv_html_template.trim()
-      ? generateTailoredHtmlCv(profile, job)
+      ? generateTailoredHtmlCv(profile, job).catch((e) => {
+          // El CV visual es un extra sobre el CV+carta en texto (que ya se
+          // generó arriba con Groq, sin depender de esto): si NVIDIA tarda
+          // demasiado o falla, se descarta solo esa parte en vez de tirar
+          // toda la generación.
+          console.error("No se pudo generar el CV visual", e);
+          return undefined;
+        })
       : Promise.resolve(undefined),
   ]);
 
-  return { ...text, ...(tailoredCvHtml ? { tailoredCvHtml } : {}) };
+  return { ...text, ...(htmlResult ? { tailoredCvHtml: htmlResult } : {}) };
 }
 
 async function generateTailoredText(
   profile: ProfileData,
   job: { title: string; company: string; description: string },
 ): Promise<{ tailoredCv: string; coverLetter: string }> {
-  const content = await nvidiaChatCompletion({
-    maxTokens: 3000,
-    jsonMode: true,
-    system:
-      "Eres un experto en redacción de CVs optimizados para sistemas ATS y cartas de " +
-      "presentación. Escribe siempre en el mismo idioma que la descripción de la oferta " +
-      "de empleo (si está en inglés, responde en inglés; si está en español, en español; " +
-      "si está en otro idioma, responde en ese idioma). Devuelves SOLO JSON válido con el " +
-      'formato {"tailoredCv": "<CV adaptado en texto plano, listo para ATS>", ' +
-      '"coverLetter": "<carta de presentación breve y personalizada>"}. ' +
-      "No inventes experiencia, logros ni empresas que no estén en el CV base: reordena, " +
-      "resalta y reformula lo existente para alinearlo con la oferta.",
-    user:
-      `CV base del candidato:\n${profile.base_cv_text.slice(0, 8000)}\n\n` +
-      `Oferta de empleo a la que aplica:\n` +
-      `- Puesto: ${job.title}\n- Empresa: ${job.company}\n` +
-      `- Descripción: ${job.description.slice(0, 4000)}\n\n` +
-      `Genera un CV adaptado (texto plano, compatible con ATS: sin tablas ni columnas) ` +
-      `y una cover letter dirigida a esta oferta, en el idioma de la oferta.`,
+  const groq = client();
+  const completion = await groq.chat.completions.create({
+    model: MODEL,
+    response_format: { type: "json_object" },
+    max_tokens: 3000,
+    messages: [
+      {
+        role: "system",
+        content:
+          "Eres un experto en redacción de CVs optimizados para sistemas ATS y cartas de " +
+          "presentación. Escribe siempre en el mismo idioma que la descripción de la oferta " +
+          "de empleo (si está en inglés, responde en inglés; si está en español, en español; " +
+          "si está en otro idioma, responde en ese idioma). Devuelves SOLO JSON válido con el " +
+          'formato {"tailoredCv": "<CV adaptado en texto plano, listo para ATS>", ' +
+          '"coverLetter": "<carta de presentación breve y personalizada>"}. ' +
+          "No inventes experiencia, logros ni empresas que no estén en el CV base: reordena, " +
+          "resalta y reformula lo existente para alinearlo con la oferta.",
+      },
+      {
+        role: "user",
+        content:
+          `CV base del candidato:\n${profile.base_cv_text.slice(0, 8000)}\n\n` +
+          `Oferta de empleo a la que aplica:\n` +
+          `- Puesto: ${job.title}\n- Empresa: ${job.company}\n` +
+          `- Descripción: ${job.description.slice(0, 4000)}\n\n` +
+          `Genera un CV adaptado (texto plano, compatible con ATS: sin tablas ni columnas) ` +
+          `y una cover letter dirigida a esta oferta, en el idioma de la oferta.`,
+      },
+    ],
   });
 
-  const parsed = parseJsonLenient(content);
+  const parsed = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
   return {
     tailoredCv: String(parsed.tailoredCv ?? ""),
     coverLetter: String(parsed.coverLetter ?? ""),
@@ -165,31 +185,6 @@ async function generateTailoredHtmlCv(
   });
 
   return extractHtml(content);
-}
-
-// No hay garantía de que NIM respete response_format:json_object para todos
-// los modelos (depende del motor que sirva a cada uno) — si lo ignora, el
-// modelo suele devolver el JSON envuelto en un bloque de código markdown en
-// vez de texto libre puro. Se intenta ambas formas antes de rendirse, y si
-// falla del todo se lanza un error con un trozo de la respuesta real para
-// que quede claro en los logs qué pasó, en vez de un SyntaxError pelado.
-function parseJsonLenient(text: string): { tailoredCv?: string; coverLetter?: string } {
-  try {
-    return JSON.parse(text || "{}");
-  } catch {
-    // sigue abajo
-  }
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenced) {
-    try {
-      return JSON.parse(fenced[1]);
-    } catch {
-      // sigue abajo
-    }
-  }
-  throw new Error(
-    `NVIDIA NIM no devolvió JSON válido para el CV/carta. Respuesta recibida: ${text.slice(0, 300)}`,
-  );
 }
 
 function extractHtml(text: string): string {
