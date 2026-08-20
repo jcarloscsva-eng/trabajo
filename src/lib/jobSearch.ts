@@ -20,6 +20,9 @@ import { sendSelfEmail } from "@/lib/gmail";
 // siguiente búsqueda.
 const MAX_CANDIDATES_PER_RUN = 12;
 const TIME_BUDGET_MS = 45_000;
+// Por debajo de este score la oferta no interesa lo suficiente como para
+// guardarla ni para contar en el email de notificación.
+const MIN_SCORE_TO_SAVE = 60;
 
 export type JobMode = "any" | "remote" | "hybrid" | "onsite";
 
@@ -118,6 +121,7 @@ export async function runJobSearch(
   for (const job of candidates) {
     if (Date.now() - startedAt > TIME_BUDGET_MS) break;
     const { score, reasoning } = await scoreJobMatch(profile, job);
+    if (score < MIN_SCORE_TO_SAVE) continue;
     const row: JobRow = {
       id: crypto.randomUUID(),
       source: job.source,
