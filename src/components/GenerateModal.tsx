@@ -64,8 +64,13 @@ export default function GenerateModal({ job, onClose }: { job: Job; onClose: () 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jobId: job.id }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Error generando materiales");
+      // Un timeout de la plataforma (más de maxDuration) devuelve una página
+      // de error en vez de JSON: se trata como fallo en vez de dejar que
+      // res.json() reviente con un mensaje críptico.
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        throw new Error(data?.error ?? `Error generando materiales (HTTP ${res.status})`);
+      }
       setResult(data);
       setTab(data.tailoredCvHtml ? "visual" : "cv");
     } catch (e) {
