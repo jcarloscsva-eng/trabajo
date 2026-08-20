@@ -6,6 +6,9 @@ import {
   fetchRemoteOkJobs,
   fetchWeWorkRemotelyJobs,
   fetchWorkingNomadsJobs,
+  fetchInfoJobsEmailAlerts,
+  fetchTecnoempleoEmailAlerts,
+  fetchLinkedInEmailAlerts,
   type RawJob,
 } from "@/lib/jobSources";
 import { scoreJobMatch } from "@/lib/groq";
@@ -89,6 +92,12 @@ export async function runJobSearch(
           fetchWorkingNomadsJobs(roleQueries, daysOld),
         ]
       : []),
+    // Alertas de InfoJobs/Tecnoempleo que el usuario configuró en su propia
+    // cuenta, leídas de su Gmail: no se filtran por ubicación/modalidad de
+    // este buscador porque ya vienen acotadas por la alerta que él mismo creó.
+    fetchInfoJobsEmailAlerts(accessToken, daysOld),
+    fetchTecnoempleoEmailAlerts(accessToken, daysOld),
+    fetchLinkedInEmailAlerts(accessToken, daysOld),
   ];
 
   const results = await Promise.all(sourcePromises);

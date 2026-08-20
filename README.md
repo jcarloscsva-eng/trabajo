@@ -7,7 +7,8 @@ selecciones. Login con Google, base de datos en tu propio Google Sheet.
 ## Cómo funciona
 
 - **Login**: OAuth de Google (Auth.js / NextAuth v5). Se piden permisos de Sheets, Drive
-  (solo archivos creados por la app) y envío de Gmail.
+  (solo archivos creados por la app) y Gmail (envío de notificaciones y lectura para las
+  alertas por email — ver más abajo).
 - **Base de datos**: al iniciar sesión se crea (o reutiliza) una hoja de cálculo llamada
   `Job Search Tracker (App Data)` en tu Google Drive, con pestañas `Jobs` y `Profile`.
 - **Búsqueda de empleos**: [Remotive](https://remotive.com/api-documentation),
@@ -19,6 +20,18 @@ selecciones. Login con Google, base de datos en tu propio Google Sheet.
   fijas de servidor, incompatibles con las funciones serverless de Vercel, y se descartó
   Adzuna porque su WAF bloquea las IPs de los datacenters de Vercel con un error 400,
   incluso con credenciales válidas y la petición bien formada.
+- **Alertas por email (LinkedIn / InfoJobs / Tecnoempleo)**: no son integraciones con esos
+  portales (no tienen API pública para búsquedas, y no se hace scraping de sus webs — el
+  robots.txt de Tecnoempleo, por ejemplo, bloquea explícitamente a los bots de Anthropic).
+  En su lugar, la app lee tu propia bandeja de Gmail (permiso de solo lectura,
+  `gmail.readonly`) buscando los emails de alertas que tú mismo configuraste en esos
+  portales, y extrae las ofertas de ahí. Es tu correo, con tu consentimiento, vía la API
+  oficial de Gmail — no accede a nada más. Limitaciones: LinkedIn no incluye descripción
+  en el email, así que la puntuación de la IA para esas ofertas se basa solo en
+  título/empresa/ubicación; los enlaces de InfoJobs son de tracking (funcionan para abrir
+  la oferta, pero dos envíos del mismo puesto pueden no deduplicarse entre sí). Para que
+  funcione, configura primero las alertas correspondientes en tu cuenta de LinkedIn/
+  InfoJobs/Tecnoempleo con la periodicidad y criterios que quieras.
 - **Región del puesto**: cada oferta se clasifica automáticamente (por su ubicación y
   descripción) en una macro-región — EMEA, LATAM, EEUU/Norteamérica, Asia/Pacífico o
   "Global / No especificada" — y se muestra como etiqueta junto a la puntuación, para
