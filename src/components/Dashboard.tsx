@@ -36,6 +36,9 @@ const MODE_LABELS: Record<JobMode, string> = {
   onsite: "Presencial",
 };
 
+// Mismas regiones que devuelve classifyRegion() en src/lib/jobSources.ts.
+const REGIONS = ["LATAM", "EEUU/Norteamérica", "Asia/Pacífico", "EMEA", "Global / No especificada"];
+
 function scoreColor(score: number) {
   if (score >= 75) return "bg-accent/15 text-accent";
   if (score >= 50) return "bg-warning/15 text-warning";
@@ -99,6 +102,7 @@ export default function Dashboard() {
   const [searching, setSearching] = useState(false);
   const [minScore, setMinScore] = useState(0);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [regionFilter, setRegionFilter] = useState<string>("all");
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [maxDaysOld, setMaxDaysOld] = useState(30);
@@ -167,9 +171,10 @@ export default function Dashboard() {
       // elegir explícitamente "Descartado" en el filtro de Estado.
       if (statusFilter === "all" && j.status === "discarded") return false;
       if (statusFilter !== "all" && j.status !== statusFilter) return false;
+      if (regionFilter !== "all" && j.region !== regionFilter) return false;
       return true;
     });
-  }, [jobs, minScore, statusFilter]);
+  }, [jobs, minScore, statusFilter, regionFilter]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -259,6 +264,21 @@ export default function Dashboard() {
             {Object.entries(STATUS_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2">
+          Región
+          <select
+            value={regionFilter}
+            onChange={(e) => setRegionFilter(e.target.value)}
+            className="rounded-md border border-border bg-transparent px-2 py-1"
+          >
+            <option value="all">Todas</option>
+            {REGIONS.map((region) => (
+              <option key={region} value={region}>
+                {region}
               </option>
             ))}
           </select>
