@@ -133,7 +133,7 @@ async function generateTailoredText(
       `y una cover letter dirigida a esta oferta, en el idioma de la oferta.`,
   });
 
-  const parsed = JSON.parse(content || "{}");
+  const parsed = parseJsonLenient(content);
   return {
     tailoredCv: String(parsed.tailoredCv ?? ""),
     coverLetter: String(parsed.coverLetter ?? ""),
@@ -165,6 +165,31 @@ async function generateTailoredHtmlCv(
   });
 
   return extractHtml(content);
+}
+
+// No hay garantía de que NIM respete response_format:json_object para todos
+// los modelos (depende del motor que sirva a cada uno) — si lo ignora, el
+// modelo suele devolver el JSON envuelto en un bloque de código markdown en
+// vez de texto libre puro. Se intenta ambas formas antes de rendirse, y si
+// falla del todo se lanza un error con un trozo de la respuesta real para
+// que quede claro en los logs qué pasó, en vez de un SyntaxError pelado.
+function parseJsonLenient(text: string): { tailoredCv?: string; coverLetter?: string } {
+  try {
+    return JSON.parse(text || "{}");
+  } catch {
+    // sigue abajo
+  }
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced) {
+    try {
+      return JSON.parse(fenced[1]);
+    } catch {
+      // sigue abajo
+    }
+  }
+  throw new Error(
+    `NVIDIA NIM no devolvió JSON válido para el CV/carta. Respuesta recibida: ${text.slice(0, 300)}`,
+  );
 }
 
 function extractHtml(text: string): string {
