@@ -1,3 +1,5 @@
+import { google } from "googleapis";
+
 export type RawJob = {
   source: string;
   title: string;
@@ -431,4 +433,257 @@ export async function fetchWorkingNomadsJobs(
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// ---- Alertas por email (Gmail) ----
+// No es scraping de InfoJobs/Tecnoempleo: son las alertas que el propio
+// usuario configuró en esos portales, leídas de su propia bandeja de Gmail
+// vía la API oficial (con su permiso de solo lectura). Los enlaces de estos
+// proveedores son de tracking (redirigen a la oferta real al hacer clic),
+// así que se usan tal cual para el campo url.
+
+const EMAIL_ALERT_MAX_MESSAGES = 10;
+
+type GmailMessagePart = {
+  mimeType?: string | null;
+  body?: { data?: string | null } | null;
+  parts?: GmailMessagePart[] | null;
+};
+
+function decodeBase64Url(data: string): string {
+  return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf-8");
+}
+
+function findMimePart(part: GmailMessagePart | null | undefined, mimeType: string): string {
+  if (!part) return "";
+  if (part.mimeType === mimeType && part.body?.data) {
+    return decodeBase64Url(part.body.data);
+  }
+  for (const child of part.parts ?? []) {
+    const found = findMimePart(child, mimeType);
+    if (found) return found;
+  }
+  return "";
+}
+
+async function fetchGmailMessageBodies(
+  accessToken: string,
+  query: string,
+): Promise<{ html: string; text: string }[]> {
+  const auth = new google.auth.OAuth2();
+  auth.setCredentials({ access_token: accessToken });
+  const gmail = google.gmail({ version: "v1", auth });
+
+  const list = await gmail.users.messages.list({
+    userId: "me",
+    q: query,
+    maxResults: EMAIL_ALERT_MAX_MESSAGES,
+  });
+  const messages = list.data.messages ?? [];
+
+  const bodies: { html: string; text: string }[] = [];
+  for (const m of messages) {
+    if (!m.id) continue;
+    const msg = await gmail.users.messages.get({ userId: "me", id: m.id, format: "full" });
+    bodies.push({
+      html: findMimePart(msg.data.payload, "text/html"),
+      text: findMimePart(msg.data.payload, "text/plain"),
+    });
+  }
+  return bodies;
+}
+
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export async function fetchInfoJobsEmailAlerts(
+  accessToken: string,
+  maxDaysOld?: number,
+): Promise<RawJob[]> {
+  const days = maxDaysOld && maxDaysOld > 0 ? maxDaysOld : 30;
+  let bodies: { html: string; text: string }[];
+  try {
+    bodies = await fetchGmailMessageBodies(
+      accessToken,
+      `from:ofertas@push.infojobs.net newer_than:${days}d`,
+    );
+  } catch (e) {
+    console.error("InfoJobs (email) error", e);
+    return [];
+  }
+
+  // Cada bloque de oferta en el HTML del email: enlace+título, empresa y
+  // ubicación, en ese orden, separados por el resto del maquetado de la tabla.
+  const jobBlockRe =
+    /<a href="(https:\/\/link\.push\.infojobs\.net\/ls\/click\?[^"]*)"[^>]*>([^<]+)<\/a>[\s\S]{0,400}?<td class="text"[^>]*>([^<]+)<\/td>[\s\S]{0,400}?<span>\s*<span>([^<]+)<\/span>/g;
+
+  const jobs: RawJob[] = [];
+  for (const { html } of bodies) {
+    if (!html) continue;
+    for (const match of html.matchAll(jobBlockRe)) {
+      const [, url, rawTitle, rawCompany, rawLocation] = match;
+      const title = decodeHtmlEntities(rawTitle);
+      const company = decodeHtmlEntities(rawCompany);
+      const location = decodeHtmlEntities(rawLocation);
+      if (!title || jobs.some((j) => j.url === url)) continue;
+      jobs.push({
+        source: "infojobs-email",
+        title,
+        company,
+        location,
+        region: classifyRegion(location),
+        url,
+        description: `${title} — ${company} (${location})`,
+        posted_at: "",
+      });
+    }
+  }
+  return jobs;
+}
+
+// El enlace de tracking.php lleva un JWT (sin cifrar, solo firmado) en el
+// parámetro cid con la URL real de destino dentro — se decodifica para tener
+// una URL estable y así deduplicar correctamente entre alertas repetidas.
+function decodeTecnoempleoDestUrl(trackingUrl: string): string {
+  try {
+    const cid = new URL(trackingUrl).searchParams.get("cid");
+    if (!cid) return trackingUrl;
+    const payloadB64 = cid.split(".")[1];
+    const payload = JSON.parse(decodeBase64Url(payloadB64)) as { dest?: string };
+    return typeof payload.dest === "string" ? payload.dest : trackingUrl;
+  } catch {
+    return trackingUrl;
+  }
+}
+
+const LINKEDIN_NOISE_LINES = new Set([
+  "esta empresa busca personal activamente",
+  "solicitar con perfil y cv",
+  "fácil solicitud",
+  "empleo destacado",
+]);
+
+export async function fetchLinkedInEmailAlerts(
+  accessToken: string,
+  maxDaysOld?: number,
+): Promise<RawJob[]> {
+  const days = maxDaysOld && maxDaysOld > 0 ? maxDaysOld : 30;
+  let bodies: { html: string; text: string }[];
+  try {
+    bodies = await fetchGmailMessageBodies(
+      accessToken,
+      `from:jobalerts-noreply@linkedin.com newer_than:${days}d`,
+    );
+  } catch (e) {
+    console.error("LinkedIn (email) error", e);
+    return [];
+  }
+
+  const jobs: RawJob[] = [];
+  for (const { text } of bodies) {
+    if (!text) continue;
+    // Cada oferta va separada por una línea de guiones en el email de alerta.
+    for (const block of text.split(/-{10,}/)) {
+      const lines = block
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+      const urlLineIdx = lines.findIndex((l) => l.startsWith("Ver anuncio de empleo:"));
+      if (urlLineIdx === -1) continue;
+      const rawUrlMatch = lines[urlLineIdx].match(/Ver anuncio de empleo:\s*(\S+)/);
+      if (!rawUrlMatch) continue;
+
+      // LinkedIn ya da la URL real del puesto (no de tracking); se le quitan
+      // los parámetros de campaña para tener un enlace estable y deduplicar
+      // bien entre alertas repetidas.
+      const idMatch = rawUrlMatch[1].match(/\/jobs\/view\/(\d+)/);
+      const url = idMatch ? `https://www.linkedin.com/jobs/view/${idMatch[1]}` : rawUrlMatch[1];
+
+      // Justo antes de la línea de la URL van, en este orden, título, empresa
+      // y ubicación — con líneas de relleno variables ("Solicitar con perfil
+      // y CV", "3 contactos"...) que se filtran antes de tomar las 3 últimas.
+      const preceding = lines
+        .slice(0, urlLineIdx)
+        .filter(
+          (l) => !LINKEDIN_NOISE_LINES.has(l.toLowerCase()) && !/^\d+\s+contactos?$/i.test(l),
+        );
+      if (preceding.length < 3) continue;
+      const location = preceding[preceding.length - 1];
+      const company = preceding[preceding.length - 2];
+      const title = preceding[preceding.length - 3];
+      if (!title || jobs.some((j) => j.url === url)) continue;
+
+      jobs.push({
+        source: "linkedin-email",
+        title,
+        company,
+        location,
+        region: classifyRegion(location),
+        // LinkedIn no incluye descripción en el email de alerta: la
+        // puntuación de la IA para estas ofertas se basa solo en
+        // título/empresa/ubicación.
+        description: `${title} — ${company} (${location})`,
+        url,
+        posted_at: "",
+      });
+    }
+  }
+  return jobs;
+}
+
+export async function fetchTecnoempleoEmailAlerts(
+  accessToken: string,
+  maxDaysOld?: number,
+): Promise<RawJob[]> {
+  const days = maxDaysOld && maxDaysOld > 0 ? maxDaysOld : 30;
+  let bodies: { html: string; text: string }[];
+  try {
+    bodies = await fetchGmailMessageBodies(
+      accessToken,
+      `from:alertas@push.tecnoempleo.com newer_than:${days}d`,
+    );
+  } catch (e) {
+    console.error("Tecnoempleo (email) error", e);
+    return [];
+  }
+
+  // La parte de texto plano del email trae cada oferta en 2 líneas: enlace de
+  // tracking + título, y luego "Empresa - Ubicación" (con "Nueva" opcional).
+  const jobBlockRe =
+    /^ {0,2}(https:\/\/www\.tecnoempleo\.com\/tracking\.php\?cid=[\w.-]+) +(.+?) *\r?\n(.+?) - (.+?)(?:&nbsp;&nbsp;Nueva)? *\r?\n/gm;
+
+  const jobs: RawJob[] = [];
+  for (const { text } of bodies) {
+    if (!text) continue;
+    for (const match of text.matchAll(jobBlockRe)) {
+      const [, trackingUrl, rawTitle, rawCompany, rawLocation] = match;
+      const title = decodeHtmlEntities(rawTitle);
+      const company = decodeHtmlEntities(rawCompany);
+      const location = decodeHtmlEntities(rawLocation);
+      const url = decodeTecnoempleoDestUrl(trackingUrl);
+      if (!title || jobs.some((j) => j.url === url)) continue;
+      jobs.push({
+        source: "tecnoempleo-email",
+        title,
+        company,
+        location,
+        region: classifyRegion(location),
+        url,
+        description: `${title} — ${company} (${location})`,
+        posted_at: "",
+      });
+    }
+  }
+  return jobs;
 }
