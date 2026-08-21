@@ -77,6 +77,15 @@ export async function runJobSearch(
   const includeRemoteOnlySources = mode !== "hybrid" && mode !== "onsite";
 
   const sourcePromises = [
+    // Alertas de InfoJobs/Tecnoempleo/LinkedIn que el usuario configuró en su
+    // propia cuenta, leídas de su Gmail: van primero y a propósito. No se
+    // filtran por ubicación/modalidad de este buscador porque ya vienen
+    // acotadas por la alerta que él mismo creó — son más relevantes que el
+    // resto de fuentes genéricas, así que no deben perder su hueco en el
+    // cupo de MAX_CANDIDATES_PER_RUN si esas otras fuentes devuelven mucho.
+    fetchInfoJobsEmailAlerts(accessToken, daysOld),
+    fetchTecnoempleoEmailAlerts(accessToken, daysOld),
+    fetchLinkedInEmailAlerts(accessToken, daysOld),
     // Jooble acepta varios roles en una sola llamada (ver fetchJoobleJobs):
     // solo hace falta una petición por ubicación, no por cada combinación
     // rol×ubicación.
@@ -95,16 +104,12 @@ export async function runJobSearch(
           fetchWorkingNomadsJobs(roleQueries, daysOld),
         ]
       : []),
-    // Alertas de InfoJobs/Tecnoempleo que el usuario configuró en su propia
-    // cuenta, leídas de su Gmail: no se filtran por ubicación/modalidad de
-    // este buscador porque ya vienen acotadas por la alerta que él mismo creó.
-    fetchInfoJobsEmailAlerts(accessToken, daysOld),
-    fetchTecnoempleoEmailAlerts(accessToken, daysOld),
-    fetchLinkedInEmailAlerts(accessToken, daysOld),
   ];
 
   const results = await Promise.all(sourcePromises);
   // Varias fuentes/roles pueden devolver la misma oferta; se deduplica por URL.
+  // El orden de sourcePromises decide qué entra si hay más candidatos que
+  // MAX_CANDIDATES_PER_RUN, así que las fuentes más relevantes van primero.
   const seenUrls = new Set<string>();
   const candidates: RawJob[] = [];
   for (const job of results.flat()) {
