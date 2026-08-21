@@ -124,20 +124,24 @@ export async function generateTailoredMaterials(
   return { ...text, ...(htmlResult ? { tailoredCvHtml: htmlResult } : {}) };
 }
 
+const CV_MARKER = "===CV===";
+const COVER_LETTER_MARKER = "===COVER LETTER===";
+
 async function generateTailoredText(
   profile: ProfileData,
   job: { title: string; company: string; description: string },
 ): Promise<{ tailoredCv: string; coverLetter: string }> {
+  // Sin response_format:json_object a propósito: ese modo obliga a Groq a
+  // devolver un documento completo y válido o nada — si un CV+oferta grandes
+  // se quedan sin presupuesto de tokens a mitad, la petición entera falla
+  // (400 json_validate_failed) en vez de devolver lo que llevaba generado.
+  // Con texto plano delimitado, un corte a mitad simplemente devuelve el CV
+  // completo y la carta truncada (o vacía), pero nunca un error duro — y de
+  // paso ahorra tokens: escapar saltos de línea en un string JSON consume
+  // más que el texto sin escapar.
   const groq = client();
   const completion = await groq.chat.completions.create({
     model: MODEL,
-    response_format: { type: "json_object" },
-    // Con 3000 se quedaba corto para un CV adaptado completo + cover letter:
-    // el modelo gastaba casi todo el presupuesto en el CV y la carta salía
-    // vacía (JSON válido, pero con "coverLetter": ""). El input de esta
-    // llamada tiene margen de sobra respecto al límite de 8.000 tokens/min
-    // de Groq (ver comentario junto a NVIDIA_MODEL más arriba), así que hay
-    // hueco para subir esto sin volver a acercarse al límite.
     max_tokens: 4000,
     messages: [
       {
@@ -146,9 +150,10 @@ async function generateTailoredText(
           "Eres un experto en redacción de CVs optimizados para sistemas ATS y cartas de " +
           "presentación. Escribe siempre en el mismo idioma que la descripción de la oferta " +
           "de empleo (si está en inglés, responde en inglés; si está en español, en español; " +
-          "si está en otro idioma, responde en ese idioma). Devuelves SOLO JSON válido con el " +
-          'formato {"tailoredCv": "<CV adaptado en texto plano, listo para ATS>", ' +
-          '"coverLetter": "<carta de presentación breve y personalizada>"}. ' +
+          "si está en otro idioma, responde en ese idioma). Responde ÚNICAMENTE con este " +
+          `formato exacto, sin explicaciones ni texto adicional:\n${CV_MARKER}\n<CV adaptado ` +
+          `en texto plano, listo para ATS>\n${COVER_LETTER_MARKER}\n<carta de presentación ` +
+          "breve y personalizada>\n\n" +
           "No inventes experiencia, logros ni empresas que no estén en el CV base: reordena, " +
           "resalta y reformula lo existente para alinearlo con la oferta.",
       },
@@ -165,11 +170,19 @@ async function generateTailoredText(
     ],
   });
 
-  const parsed = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
-  return {
-    tailoredCv: String(parsed.tailoredCv ?? ""),
-    coverLetter: String(parsed.coverLetter ?? ""),
-  };
+  const content = completion.choices[0]?.message?.content ?? "";
+  const cvStart = content.indexOf(CV_MARKER);
+  const letterStart = content.indexOf(COVER_LETTER_MARKER);
+  if (cvStart === -1) {
+    // El modelo no siguió el formato en absoluto: mejor devolver el texto
+    // crudo como CV que perder por completo lo que costó generar.
+    return { tailoredCv: content.trim(), coverLetter: "" };
+  }
+  const tailoredCv = content
+    .slice(cvStart + CV_MARKER.length, letterStart === -1 ? undefined : letterStart)
+    .trim();
+  const coverLetter = letterStart === -1 ? "" : content.slice(letterStart + COVER_LETTER_MARKER.length).trim();
+  return { tailoredCv, coverLetter };
 }
 
 async function generateTailoredHtmlCv(
