@@ -54,45 +54,51 @@ export async function scoreJobMatch(
   profile: ProfileData,
   job: { title: string; company: string; description: string },
 ): Promise<{ score: number; reasoning: string }> {
-  const groq = client();
-  const completion = await groq.chat.completions.create({
-    model: MODEL,
-    response_format: { type: "json_object" },
-    max_tokens: 400,
-    messages: [
-      {
-        role: "system",
-        content:
-          "Eres un asistente de búsqueda de empleo. Evalúas qué tan alineada está una oferta " +
-          "de trabajo con el perfil de un candidato. Respondes SOLO con JSON válido: " +
-          '{"score": <entero 0-100>, "reasoning": "<explicación breve en español, 1-3 frases>"}.',
-      },
-      {
-        role: "user",
-        content:
-          `Perfil del candidato:\n` +
-          `- Titular: ${profile.headline}\n` +
-          `- Skills: ${profile.skills}\n` +
-          `- Años de experiencia: ${profile.years_experience}\n` +
-          `- Roles objetivo: ${profile.target_roles}\n` +
-          `- Seniority: ${profile.seniority}\n` +
-          `- Ubicaciones preferidas: ${profile.locations}\n\n` +
-          `Oferta de empleo:\n` +
-          `- Puesto: ${job.title}\n` +
-          `- Empresa: ${job.company}\n` +
-          `- Descripción: ${job.description.slice(0, 4000)}\n\n` +
-          `Puntúa la alineación de 0 a 100 y explica brevemente por qué.`,
-      },
-    ],
-  });
-
+  // Todo envuelto en un único try/catch: si Groq rechaza la generación (su
+  // propia validación de JSON puede fallar con ciertos textos, típicamente
+  // descripciones "sucias" extraídas de un email de alerta) o si el JSON
+  // devuelto no parsea, una sola oferta problemática no debe tirar toda la
+  // búsqueda — el resto de candidatos de ese lote se siguen puntuando.
   try {
+    const groq = client();
+    const completion = await groq.chat.completions.create({
+      model: MODEL,
+      response_format: { type: "json_object" },
+      max_tokens: 400,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Eres un asistente de búsqueda de empleo. Evalúas qué tan alineada está una oferta " +
+            "de trabajo con el perfil de un candidato. Respondes SOLO con JSON válido: " +
+            '{"score": <entero 0-100>, "reasoning": "<explicación breve en español, 1-3 frases>"}.',
+        },
+        {
+          role: "user",
+          content:
+            `Perfil del candidato:\n` +
+            `- Titular: ${profile.headline}\n` +
+            `- Skills: ${profile.skills}\n` +
+            `- Años de experiencia: ${profile.years_experience}\n` +
+            `- Roles objetivo: ${profile.target_roles}\n` +
+            `- Seniority: ${profile.seniority}\n` +
+            `- Ubicaciones preferidas: ${profile.locations}\n\n` +
+            `Oferta de empleo:\n` +
+            `- Puesto: ${job.title}\n` +
+            `- Empresa: ${job.company}\n` +
+            `- Descripción: ${job.description.slice(0, 4000)}\n\n` +
+            `Puntúa la alineación de 0 a 100 y explica brevemente por qué.`,
+        },
+      ],
+    });
+
     const parsed = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
     return {
       score: Math.max(0, Math.min(100, Math.round(Number(parsed.score) || 0))),
       reasoning: String(parsed.reasoning ?? ""),
     };
-  } catch {
+  } catch (e) {
+    console.error("No se pudo puntuar la oferta", job.title, e);
     return { score: 0, reasoning: "No se pudo evaluar automáticamente." };
   }
 }
