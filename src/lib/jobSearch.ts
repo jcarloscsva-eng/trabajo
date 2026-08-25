@@ -118,6 +118,10 @@ export async function runJobSearch(
     candidates.push(job);
     if (candidates.length >= MAX_CANDIDATES_PER_RUN) break;
   }
+  console.log(
+    `Candidatos a puntuar (${candidates.length}/${MAX_CANDIDATES_PER_RUN}): ` +
+      candidates.map((j) => `${j.source}:"${j.title}"`).join(", "),
+  );
 
   // Se guarda cada oferta justo tras puntuarla (en vez de esperar a tener el
   // lote completo) para que aparezca en el dashboard casi en tiempo real y
@@ -126,6 +130,10 @@ export async function runJobSearch(
   for (const job of candidates) {
     if (Date.now() - startedAt > TIME_BUDGET_MS) break;
     const { score, reasoning } = await scoreJobMatch(profile, job);
+    console.log(
+      `Puntuada: ${job.source}:"${job.title}" → ${score}/100` +
+        (score < MIN_SCORE_TO_SAVE ? " (descartada, por debajo de 60)" : " (guardada)"),
+    );
     if (score < MIN_SCORE_TO_SAVE) continue;
     const row: JobRow = {
       id: crypto.randomUUID(),

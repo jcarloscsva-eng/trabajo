@@ -549,6 +549,7 @@ export async function fetchInfoJobsEmailAlerts(
       });
     }
   }
+  console.log(`InfoJobs (email): ${bodies.length} correo(s), ${jobs.length} oferta(s) extraída(s)`);
   return jobs;
 }
 
@@ -639,6 +640,7 @@ export async function fetchLinkedInEmailAlerts(
       });
     }
   }
+  console.log(`LinkedIn (email): ${bodies.length} correo(s), ${jobs.length} oferta(s) extraída(s)`);
   return jobs;
 }
 
@@ -685,5 +687,6 @@ export async function fetchTecnoempleoEmailAlerts(
       });
     }
   }
+  console.log(`Tecnoempleo (email): ${bodies.length} correo(s), ${jobs.length} oferta(s) extraída(s)`);
   return jobs;
 }
