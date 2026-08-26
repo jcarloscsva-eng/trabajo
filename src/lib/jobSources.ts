@@ -522,6 +522,11 @@ export async function fetchInfoJobsEmailAlerts(
     console.error("InfoJobs (email) error", e);
     return [];
   }
+  if (bodies[0]) {
+    console.log(
+      `InfoJobs (email) HTML crudo (primer correo, 1500 car.): ${bodies[0].html.slice(0, 1500)}`,
+    );
+  }
 
   // Cada bloque de oferta en el HTML del email: enlace+título, empresa y
   // ubicación, en ese orden, separados por el resto del maquetado de la tabla.
@@ -568,11 +573,21 @@ function decodeTecnoempleoDestUrl(trackingUrl: string): string {
   }
 }
 
+// Etiquetas variables que LinkedIn intercala entre la ubicación y el enlace
+// de la oferta en el email de alerta. Si falta alguna aquí, esa línea se
+// cuela como si fuera la ubicación real y desplaza título/empresa/ubicación
+// una posición — visto en producción con "Candidato destacado" y
+// "Crecimiento rápido" (verificado contra el texto crudo real de un email,
+// con "Ver original" en Gmail: 6/6 ofertas quedaban mal etiquetadas antes
+// de añadir estas dos).
 const LINKEDIN_NOISE_LINES = new Set([
   "esta empresa busca personal activamente",
   "solicitar con perfil y cv",
   "fácil solicitud",
   "empleo destacado",
+  "candidato destacado",
+  "crecimiento rápido",
+  "en busca de personal",
 ]);
 
 export async function fetchLinkedInEmailAlerts(
@@ -589,6 +604,11 @@ export async function fetchLinkedInEmailAlerts(
   } catch (e) {
     console.error("LinkedIn (email) error", e);
     return [];
+  }
+  if (bodies[0]) {
+    console.log(
+      `LinkedIn (email) texto crudo (primer correo, 1500 car.): ${bodies[0].text.slice(0, 1500)}`,
+    );
   }
 
   const jobs: RawJob[] = [];
@@ -658,6 +678,11 @@ export async function fetchTecnoempleoEmailAlerts(
   } catch (e) {
     console.error("Tecnoempleo (email) error", e);
     return [];
+  }
+  if (bodies[0]) {
+    console.log(
+      `Tecnoempleo (email) texto crudo (primer correo, 1500 car.): ${bodies[0].text.slice(0, 1500)}`,
+    );
   }
 
   // La parte de texto plano del email trae cada oferta en 2 líneas: enlace de
